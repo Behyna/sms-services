@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/Behyna/sms-services/smsgateway/internal/api"
+	"github.com/Behyna/sms-services/smsgateway/internal/api/v1"
 	"github.com/Behyna/sms-services/smsgateway/internal/config"
 	"github.com/gofiber/fiber/v2"
 	"go.uber.org/fx"
@@ -17,13 +18,13 @@ func main() {
 			// TODO: wrap fiber,
 			zap.NewProduction,
 			fiber.New,
-			api.NewHandler,
+			v1.NewHandler,
 		),
 		fx.Invoke(startServer),
 	).Run()
 }
 
-func startServer(app *fiber.App, handler *api.Handler, cfg *config.Config, logger *zap.Logger, lc fx.Lifecycle) {
+func startServer(app *fiber.App, handler *v1.Handler, cfg *config.Config, logger *zap.Logger, lc fx.Lifecycle) {
 	api.SetupRoutes(app, handler)
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
