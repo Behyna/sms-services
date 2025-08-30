@@ -1,22 +1,35 @@
 package main
 
 import (
-	"log"
+	"context"
 
 	"github.com/Behyna/sms-services/smsgateway/internal/api"
 	"github.com/Behyna/sms-services/smsgateway/internal/config"
 	"github.com/gofiber/fiber/v2"
+	"go.uber.org/fx"
 )
 
 func main() {
-	cfg, err := config.Load()
-	if err != nil {
-		log.Fatal(err)
-	}
+	fx.New(
+		fx.Provide(
+			config.Load,
+			// TODO: wrap fiber
+			fiber.New,
+			api.NewHandler,
+		),
+		fx.Invoke(startServer),
+	).Run()
+}
 
-	app := fiber.New()
-
-	api.SetupRoutes(app, api.NewHandler())
-
-	log.Fatal(app.Listen(cfg.API.Port))
+func startServer(app *fiber.App, handler *api.Handler, cfg *config.Config, lc fx.Lifecycle) {
+	api.SetupRoutes(app, handler)
+	lc.Append(fx.Hook{
+		OnStart: func(ctx context.Context) error {
+			go app.Listen(cfg.API.Port)
+			return nil
+		},
+		OnStop: func(ctx context.Context) error {
+			return app.ShutdownWithContext(ctx)
+		},
+	})
 }
