@@ -8,6 +8,7 @@ import (
 	"github.com/Behyna/sms-services/smsgateway/internal/config"
 	"github.com/Behyna/sms-services/smsgateway/internal/database"
 	"github.com/Behyna/sms-services/smsgateway/internal/repository"
+	"github.com/Behyna/sms-services/smsgateway/internal/service"
 	"github.com/gofiber/fiber/v2"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
@@ -24,6 +25,7 @@ func main() {
 			database.NewConnection,
 			repository.NewMessageRepository,
 			repository.NewTxLogRepository,
+			service.NewMessageService,
 		),
 		fx.Invoke(startServer),
 	).Run()
