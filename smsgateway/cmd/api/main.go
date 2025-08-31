@@ -6,6 +6,7 @@ import (
 	"github.com/Behyna/sms-services/smsgateway/internal/api"
 	"github.com/Behyna/sms-services/smsgateway/internal/api/v1"
 	"github.com/Behyna/sms-services/smsgateway/internal/config"
+	"github.com/Behyna/sms-services/smsgateway/internal/database"
 	"github.com/gofiber/fiber/v2"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
@@ -19,6 +20,7 @@ func main() {
 			zap.NewProduction,
 			fiber.New,
 			v1.NewHandler,
+			database.NewConnection,
 		),
 		fx.Invoke(startServer),
 	).Run()

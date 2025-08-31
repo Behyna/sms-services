@@ -7,11 +7,20 @@ import (
 )
 
 type Config struct {
-	API API `mapstructure:"api"`
+	API      API      `mapstructure:"api"`
+	Database Database `mapstructure:"database"`
 }
 
 type API struct {
 	Port string `mapstructure:"port"`
+}
+
+type Database struct {
+	Host     string `mapstructure:"host"`
+	Port     string `mapstructure:"port"`
+	User     string `mapstructure:"user"`
+	Password string `mapstructure:"password"`
+	Name     string `mapstructure:"name"`
 }
 
 func Load() (cfg *Config, err error) {
