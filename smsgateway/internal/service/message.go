@@ -2,10 +2,12 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/Behyna/sms-services/smsgateway/internal/model"
 	"github.com/Behyna/sms-services/smsgateway/internal/repository"
+	"github.com/Behyna/sms-services/smsgateway/pkg/mq"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -20,14 +22,16 @@ type Message struct {
 
 	db     *gorm.DB
 	logger *zap.Logger
+	pub    mq.Publisher
 }
 
 func NewMessageService(messageRepo repository.MessageRepository, txLogRepo repository.TxLogRepository,
-	db *gorm.DB, logger *zap.Logger) MessageService {
-	return &Message{messageRepo: messageRepo, txLogRepo: txLogRepo, db: db, logger: logger}
+	db *gorm.DB, logger *zap.Logger, publisher mq.Publisher) MessageService {
+	return &Message{messageRepo: messageRepo, txLogRepo: txLogRepo, db: db, logger: logger, pub: publisher}
 }
 
 func (m *Message) CreateMessageTransaction(ctx context.Context, cmd CreateMessageCommand) error {
+	// TODO call to credit.
 	message := model.Message{
 		ClientMessageID: cmd.ClientMessageID,
 		FromMSISDN:      cmd.FromMSISDN,
@@ -71,6 +75,28 @@ func (m *Message) CreateMessageTransaction(ctx context.Context, cmd CreateMessag
 
 	if err != nil {
 		m.logger.Error("Transaction failed", zap.Error(err))
+		return err
+	}
+
+	out := SendMessageCommand{
+		MessageID:  message.ID,
+		ToMSISDN:   cmd.ToMSISDN,
+		FromMSISDN: cmd.FromMSISDN,
+		Text:       cmd.Text,
+	}
+
+	body, _ := json.Marshal(out)
+	if err := m.pub.Publish(ctx, "", "sms.send", body); err != nil {
+		m.logger.Error("Failed to publish message to queue", zap.Error(err))
+		return err
+	}
+
+	now := time.Now()
+	txLog.Published = true
+	txLog.PublishedAt = &now
+
+	if err := m.txLogRepo.Update(txLog); err != nil {
+		m.logger.Error("Failed to update transaction log", zap.Error(err))
 		return err
 	}
 

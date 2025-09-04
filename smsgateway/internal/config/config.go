@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 
+	"github.com/Behyna/sms-services/smsgateway/pkg/mq"
 	"github.com/Behyna/sms-services/smsgateway/pkg/mysql"
 	"github.com/spf13/viper"
 )
@@ -10,6 +11,7 @@ import (
 type Config struct {
 	API      API          `mapstructure:"api"`
 	Database mysql.Config `mapstructure:"database"`
+	RabbitMQ mq.Config    `mapstructure:"rabbitmq"`
 }
 
 type API struct {

@@ -8,6 +8,7 @@ import (
 	"github.com/Behyna/sms-services/smsgateway/internal/config"
 	"github.com/Behyna/sms-services/smsgateway/internal/repository"
 	"github.com/Behyna/sms-services/smsgateway/internal/service"
+	"github.com/Behyna/sms-services/smsgateway/pkg/mq"
 	"github.com/Behyna/sms-services/smsgateway/pkg/mysql"
 	"github.com/gofiber/fiber/v2"
 	"go.uber.org/fx"
@@ -24,6 +25,8 @@ func main() {
 			fiber.New,
 			v1.NewHandler,
 			NewConnectionDB,
+			NewMQConnection,
+			NewMQPublisher,
 			repository.NewMessageRepository,
 			repository.NewTxLogRepository,
 			service.NewMessageService,
@@ -53,6 +56,33 @@ func startServer(app *fiber.App, handler *v1.Handler, cfg *config.Config, logger
 	})
 }
 
+func setupQueues(rabbitMQ *mq.RabbitMQ, logger *zap.Logger, lc fx.Lifecycle) {
+	lc.Append(fx.Hook{
+		OnStart: func(ctx context.Context) error {
+			queues := []string{"sms.send", "sms.refund"}
+			if err := rabbitMQ.DeclareTopology(queues); err != nil {
+				logger.Error("Failed to declare queues", zap.Error(err))
+				return err
+			}
+
+			logger.Info("Queues declared successfully for publishing")
+			return nil
+		},
+		OnStop: func(ctx context.Context) error {
+			logger.Info("Closing RabbitMQ connection")
+			return rabbitMQ.Close()
+		},
+	})
+}
+
 func NewConnectionDB(ctx context.Context, cfg config.Config, logger *zap.Logger) (*gorm.DB, error) {
 	return mysql.NewConnection(ctx, cfg.Database, logger)
+}
+
+func NewMQConnection(cfg config.Config, logger *zap.Logger) (*mq.RabbitMQ, error) {
+	return mq.NewConnection(cfg.RabbitMQ, logger)
+}
+
+func NewMQPublisher(rabbitMQ *mq.RabbitMQ) (mq.Publisher, error) {
+	return rabbitMQ.CreatePublisher()
 }

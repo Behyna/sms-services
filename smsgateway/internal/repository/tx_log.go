@@ -7,6 +7,7 @@ import (
 
 type TxLogRepository interface {
 	CreateWithTx(tx *gorm.DB, log *model.TxLog) error
+	Update(log *model.TxLog) error
 }
 
 type TxLog struct {
@@ -23,4 +24,11 @@ func (r *TxLog) CreateWithTx(tx *gorm.DB, log *model.TxLog) error {
 	}
 
 	return nil
+}
+
+func (r *TxLog) Update(log *model.TxLog) error {
+	return r.db.Model(log).Where("message_id = ?", log.MessageID).Updates(map[string]interface{}{
+		"published":    log.Published,
+		"published_at": log.PublishedAt,
+	}).Error
 }
