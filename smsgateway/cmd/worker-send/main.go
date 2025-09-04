@@ -3,12 +3,12 @@ package main
 import (
 	"context"
 
+	"github.com/Behyna/common/pkg/mq"
+	"github.com/Behyna/common/pkg/mysql"
 	"github.com/Behyna/sms-services/smsgateway/internal/config"
 	"github.com/Behyna/sms-services/smsgateway/internal/consumers"
 	"github.com/Behyna/sms-services/smsgateway/internal/repository"
 	"github.com/Behyna/sms-services/smsgateway/internal/service"
-	"github.com/Behyna/sms-services/smsgateway/pkg/mq"
-	"github.com/Behyna/sms-services/smsgateway/pkg/mysql"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -56,6 +56,7 @@ func runSendConsumer(cfg *config.Config, handler *consumers.Handler, logger *zap
 		},
 	})
 }
+
 func NewConnectionDB(ctx context.Context, cfg config.Config, logger *zap.Logger) (*gorm.DB, error) {
 	return mysql.NewConnection(ctx, cfg.Database, logger)
 }

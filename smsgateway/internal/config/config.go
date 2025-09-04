@@ -3,9 +3,9 @@ package config
 import (
 	"fmt"
 
-	"github.com/Behyna/sms-services/smsgateway/pkg/mq"
-	"github.com/Behyna/sms-services/smsgateway/pkg/mysql"
-	"github.com/Behyna/sms-services/smsgateway/pkg/smsprovider"
+	"github.com/Behyna/common/pkg/mq"
+	"github.com/Behyna/common/pkg/mysql"
+	"github.com/Behyna/common/pkg/smsprovider"
 	"github.com/spf13/viper"
 )
 
@@ -18,6 +18,11 @@ type Config struct {
 
 type API struct {
 	Port string `mapstructure:"port"`
+}
+
+type EncryptionConfig struct {
+	Key  []byte
+	Mode string
 }
 
 func Load() (cfg *Config, err error) {

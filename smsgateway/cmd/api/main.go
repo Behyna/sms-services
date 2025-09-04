@@ -3,15 +3,15 @@ package main
 import (
 	"context"
 
+	"github.com/Behyna/common/pkg/httpclient"
+	"github.com/Behyna/common/pkg/mq"
+	"github.com/Behyna/common/pkg/mysql"
+	"github.com/Behyna/common/pkg/smsprovider"
 	"github.com/Behyna/sms-services/smsgateway/internal/api"
-	"github.com/Behyna/sms-services/smsgateway/internal/api/v1"
+	v1 "github.com/Behyna/sms-services/smsgateway/internal/api/v1"
 	"github.com/Behyna/sms-services/smsgateway/internal/config"
 	"github.com/Behyna/sms-services/smsgateway/internal/repository"
 	"github.com/Behyna/sms-services/smsgateway/internal/service"
-	"github.com/Behyna/sms-services/smsgateway/pkg/httpclient"
-	"github.com/Behyna/sms-services/smsgateway/pkg/mq"
-	"github.com/Behyna/sms-services/smsgateway/pkg/mysql"
-	"github.com/Behyna/sms-services/smsgateway/pkg/smsprovider"
 	"github.com/gofiber/fiber/v2"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
@@ -25,13 +25,15 @@ func main() {
 			// TODO: wrap fiber,
 			zap.NewProduction,
 			fiber.New,
-			v1.NewHandler,
+
 			NewConnectionDB,
 			NewMQConnection,
 			NewMQPublisher,
 			repository.NewMessageRepository,
 			repository.NewTxLogRepository,
 			service.NewMessageService,
+
+			v1.NewHandler,
 		),
 		fx.Invoke(startServer),
 	).Run()
@@ -77,11 +79,12 @@ func setupQueues(rabbitMQ *mq.RabbitMQ, logger *zap.Logger, lc fx.Lifecycle) {
 	})
 }
 
-func NewConnectionDB(ctx context.Context, cfg config.Config, logger *zap.Logger) (*gorm.DB, error) {
+func NewConnectionDB(cfg *config.Config, logger *zap.Logger) (*gorm.DB, error) {
+	ctx := context.Background()
 	return mysql.NewConnection(ctx, cfg.Database, logger)
 }
 
-func NewMQConnection(cfg config.Config, logger *zap.Logger) (*mq.RabbitMQ, error) {
+func NewMQConnection(cfg *config.Config, logger *zap.Logger) (*mq.RabbitMQ, error) {
 	return mq.NewConnection(cfg.RabbitMQ, logger)
 }
 

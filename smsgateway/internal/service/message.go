@@ -7,7 +7,7 @@ import (
 
 	"github.com/Behyna/sms-services/smsgateway/internal/model"
 	"github.com/Behyna/sms-services/smsgateway/internal/repository"
-	"github.com/Behyna/sms-services/smsgateway/pkg/mq"
+	"github.com/Behyna/common/pkg/mq"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
