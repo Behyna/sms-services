@@ -1,17 +1,25 @@
 package mysql
 
 import (
+	"context"
 	"fmt"
 	"time"
 
-	"github.com/Behyna/sms-services/smsgateway/internal/config"
 	"go.uber.org/zap"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	gormLogger "gorm.io/gorm/logger"
 )
 
-func NewConnection(cfg *config.Database, logger *zap.Logger) (db *gorm.DB, err error) {
+type Config struct {
+	Host     string `mapstructure:"host"`
+	Port     string `mapstructure:"port"`
+	User     string `mapstructure:"user"`
+	Password string `mapstructure:"password"`
+	Name     string `mapstructure:"name"`
+}
+
+func NewConnection(ctx context.Context, cfg Config, logger *zap.Logger) (db *gorm.DB, err error) {
 	dsn := buildDSN(cfg)
 
 	// TODO: gorm logger to read from config
@@ -55,10 +63,10 @@ func NewConnection(cfg *config.Database, logger *zap.Logger) (db *gorm.DB, err e
 		zap.String("database", cfg.Name),
 	)
 
-	return db, nil
+	return db.WithContext(ctx), nil
 }
 
-func buildDSN(cfg *config.Database) string {
+func buildDSN(cfg Config) string {
 	return fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
 		cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.Name)
 }

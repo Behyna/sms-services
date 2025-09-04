@@ -3,24 +3,17 @@ package config
 import (
 	"fmt"
 
+	"github.com/Behyna/sms-services/smsgateway/pkg/mysql"
 	"github.com/spf13/viper"
 )
 
 type Config struct {
-	API      API      `mapstructure:"api"`
-	Database Database `mapstructure:"database"`
+	API      API          `mapstructure:"api"`
+	Database mysql.Config `mapstructure:"database"`
 }
 
 type API struct {
 	Port string `mapstructure:"port"`
-}
-
-type Database struct {
-	Host     string `mapstructure:"host"`
-	Port     string `mapstructure:"port"`
-	User     string `mapstructure:"user"`
-	Password string `mapstructure:"password"`
-	Name     string `mapstructure:"name"`
 }
 
 func Load() (cfg *Config, err error) {
