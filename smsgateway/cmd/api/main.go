@@ -8,8 +8,10 @@ import (
 	"github.com/Behyna/sms-services/smsgateway/internal/config"
 	"github.com/Behyna/sms-services/smsgateway/internal/repository"
 	"github.com/Behyna/sms-services/smsgateway/internal/service"
+	"github.com/Behyna/sms-services/smsgateway/pkg/httpclient"
 	"github.com/Behyna/sms-services/smsgateway/pkg/mq"
 	"github.com/Behyna/sms-services/smsgateway/pkg/mysql"
+	"github.com/Behyna/sms-services/smsgateway/pkg/smsprovider"
 	"github.com/gofiber/fiber/v2"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
@@ -85,4 +87,9 @@ func NewMQConnection(cfg config.Config, logger *zap.Logger) (*mq.RabbitMQ, error
 
 func NewMQPublisher(rabbitMQ *mq.RabbitMQ) (mq.Publisher, error) {
 	return rabbitMQ.CreatePublisher()
+}
+
+func NewProvider(cfg config.Config) smsprovider.Provider {
+	client := httpclient.NewHTTPClient(cfg.Provider.Timeout)
+	return smsprovider.NewSMSProvider(cfg.Provider, client)
 }

@@ -5,13 +5,15 @@ import (
 
 	"github.com/Behyna/sms-services/smsgateway/pkg/mq"
 	"github.com/Behyna/sms-services/smsgateway/pkg/mysql"
+	"github.com/Behyna/sms-services/smsgateway/pkg/smsprovider"
 	"github.com/spf13/viper"
 )
 
 type Config struct {
-	API      API          `mapstructure:"api"`
-	Database mysql.Config `mapstructure:"database"`
-	RabbitMQ mq.Config    `mapstructure:"rabbitmq"`
+	API      API                `mapstructure:"api"`
+	Database mysql.Config       `mapstructure:"database"`
+	RabbitMQ mq.Config          `mapstructure:"rabbitmq"`
+	Provider smsprovider.Config `mapstructure:"provider"`
 }
 
 type API struct {

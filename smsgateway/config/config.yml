@@ -8,3 +8,8 @@ database:
   name: smsgateway
 rabbitmq:
   url: amqp://guest:guest@localhost:5672/
+provider:
+  timeout: 2s
+  max_retry: 1
+  enable: true
+  url: ""
