@@ -1,0 +1,10 @@
+api:
+  port: :8080
+database:
+  host: localhost
+  port: 3306
+  user: root
+  password: rootpassword
+  name: payment
+encryption:
+  key: "your_encryption_key_here"
