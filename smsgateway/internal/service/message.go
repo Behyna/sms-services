@@ -14,6 +14,7 @@ import (
 
 type MessageService interface {
 	CreateMessageTransaction(ctx context.Context, cmd CreateMessageCommand) error
+	SendMessage(ctx context.Context, cmd SendMessageCommand) error
 }
 
 type Message struct {
@@ -100,5 +101,9 @@ func (m *Message) CreateMessageTransaction(ctx context.Context, cmd CreateMessag
 		return err
 	}
 
+	return nil
+}
+
+func (m *Message) SendMessage(ctx context.Context, cmd SendMessageCommand) error {
 	return nil
 }
