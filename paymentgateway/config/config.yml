@@ -1,10 +1,10 @@
 api:
-  port: :8080
+  port: :8082
 database:
   host: localhost
   port: 3306
   user: root
   password: rootpassword
-  name: payment
+  name: paymentgateway
 encryption:
-  key: "your_encryption_key_here"
+  key: "adasdasdasdsadasdasd"

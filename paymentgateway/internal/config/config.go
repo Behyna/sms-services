@@ -18,7 +18,7 @@ type API struct {
 }
 
 type EncryptionConfig struct {
-	Key  []byte
+	Key  string
 	Mode string
 }
 

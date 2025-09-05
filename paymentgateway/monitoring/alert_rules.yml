@@ -1,0 +1,211 @@
+groups:
+  - name: paymentgateway_alerts
+    rules:
+      # Service availability alerts
+      - alert: PaymentGatewayDown
+        expr: up{job="paymentgateway"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Payment Gateway service is down"
+          description: "Payment Gateway service has been down for more than 1 minute."
+
+      - alert: PaymentGatewayHighErrorRate
+        expr: rate(paymentgateway_http_requests_total{status_code=~"5.."}[5m]) / rate(paymentgateway_http_requests_total[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High error rate in Payment Gateway"
+          description: "Payment Gateway error rate is {{ $value | humanizePercentage }} over the last 5 minutes."
+
+      # Response time alerts
+      - alert: PaymentGatewayHighLatency
+        expr: histogram_quantile(0.95, rate(paymentgateway_http_request_duration_seconds_bucket[5m])) > 1
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High latency in Payment Gateway"
+          description: "95th percentile latency is {{ $value }}s over the last 5 minutes."
+
+      - alert: PaymentGatewayVeryHighLatency
+        expr: histogram_quantile(0.95, rate(paymentgateway_http_request_duration_seconds_bucket[5m])) > 3
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Very high latency in Payment Gateway"
+          description: "95th percentile latency is {{ $value }}s over the last 5 minutes."
+
+      # Business logic alerts
+      - alert: UserBalanceCreationFailures
+        expr: rate(paymentgateway_user_balance_creation_errors_total[5m]) > 0.01
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High rate of user balance creation failures"
+          description: "User balance creation failure rate is {{ $value }} errors per second."
+
+      - alert: TransactionErrors
+        expr: rate(paymentgateway_transaction_errors_total[5m]) > 0.05
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High rate of transaction errors"
+          description: "Transaction error rate is {{ $value }} errors per second for type {{ $labels.tx_type }}."
+
+      - alert: ValidationErrorSpike
+        expr: rate(paymentgateway_validation_errors_total[5m]) > 1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High validation error rate"
+          description: "Validation error rate is {{ $value }} errors per second for field {{ $labels.field }}."
+
+      # Database alerts
+      - alert: DatabaseConnectionsHigh
+        expr: paymentgateway_db_connections_in_use / (paymentgateway_db_connections_in_use + paymentgateway_db_connections_idle) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Database connection pool usage high"
+          description: "Database connection pool usage is {{ $value | humanizePercentage }}."
+
+      - alert: DatabaseSlowQueries
+        expr: histogram_quantile(0.95, rate(paymentgateway_db_query_duration_seconds_bucket[5m])) > 0.1
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Slow database queries detected"
+          description: "95th percentile database query time is {{ $value }}s for {{ $labels.operation }} on {{ $labels.table }}."
+
+      - alert: DatabaseConnectionErrors
+        expr: rate(paymentgateway_db_connection_errors_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Database connection errors"
+          description: "Database connection error rate is {{ $value }} errors per second."
+
+      # System resource alerts
+      - alert: PaymentGatewayHighMemoryUsage
+        expr: paymentgateway_memory_usage_bytes{type="heap_inuse"} / 1024 / 1024 > 512
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage in Payment Gateway"
+          description: "Memory usage is {{ $value }}MB."
+
+      - alert: PaymentGatewayTooManyGoroutines
+        expr: paymentgateway_goroutines > 1000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Too many goroutines in Payment Gateway"
+          description: "Number of goroutines is {{ $value }}."
+
+      # HTTP specific alerts
+      - alert: PaymentGatewayTooManyRequestsInFlight
+        expr: paymentgateway_http_requests_in_flight > 100
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Too many concurrent requests"
+          description: "Number of concurrent HTTP requests is {{ $value }}."
+
+      # MySQL specific alerts (if using mysql-exporter)
+      - alert: MySQLDown
+        expr: mysql_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MySQL is down"
+          description: "MySQL database is down."
+
+      - alert: MySQLTooManyConnections
+        expr: mysql_global_status_threads_connected / mysql_global_variables_max_connections > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MySQL connection usage high"
+          description: "MySQL connection usage is {{ $value | humanizePercentage }}."
+
+      - alert: MySQLSlowQueries
+        expr: rate(mysql_global_status_slow_queries[5m]) > 0.1
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MySQL slow queries detected"
+          description: "MySQL slow query rate is {{ $value }} queries per second."
+
+      # Node exporter alerts (system level)
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage"
+          description: "CPU usage is {{ $value }}% on instance {{ $labels.instance }}."
+
+      - alert: HighMemoryUsage
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is {{ $value }}% on instance {{ $labels.instance }}."
+
+      - alert: DiskSpaceRunningOut
+        expr: (1 - (node_filesystem_avail_bytes / node_filesystem_size_bytes)) * 100 > 85
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Disk space running out"
+          description: "Disk usage is {{ $value }}% on {{ $labels.mountpoint }} of instance {{ $labels.instance }}."
+
+  - name: paymentgateway_business_alerts
+    rules:
+      # Business specific thresholds
+      - alert: UnusualTransactionVolume
+        expr: rate(paymentgateway_transactions_created_total[1h]) > 100
+        for: 5m
+        labels:
+          severity: info
+        annotations:
+          summary: "Unusual transaction volume detected"
+          description: "Transaction creation rate is {{ $value }} transactions per second over the last hour."
+
+      - alert: LowTransactionVolume
+        expr: rate(paymentgateway_transactions_created_total[1h]) < 0.1
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Unusually low transaction volume"
+          description: "Transaction creation rate is only {{ $value }} transactions per second over the last hour."
+
+      - alert: BalanceRetrievalFailures
+        expr: rate(paymentgateway_balance_retrieval_total{status="error"}[10m]) / rate(paymentgateway_balance_retrieval_total[10m]) > 0.05
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High balance retrieval failure rate"
+          description: "Balance retrieval failure rate is {{ $value | humanizePercentage }}."

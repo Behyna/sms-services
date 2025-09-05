@@ -4,7 +4,6 @@ services:
   mysql:
     image: mysql:8.0
     container_name: mysql
-    restart: always
     environment:
       MYSQL_ROOT_PASSWORD: rootpassword
       MYSQL_DATABASE: smsgateway
@@ -14,20 +13,174 @@ services:
       - "3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
+    networks:
+      - monitoring
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      
+      
+  # paymentgateway:
+  #   build: ./paymentgateway
+  #   container_name: paymentgateway
+  #   ports:
+  #     - "8082:8082"
+  #   depends_on:
+  #     mysql:
+  #       condition: service_healthy
+  #   environment:
+  #     - DATABASE_HOST=mysql
+  #     - DATABASE_PORT=3306
+  #     - DATABASE_USER=root
+  #     - DATABASE_PASSWORD=rootpassword
+  #     - DATABASE_NAME=paymentgateway
+  #   networks:
+  #     - monitoring
+  #   restart: unless-stopped
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:8082/healthz"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+
+
+  mysql-exporter:
+    image: prom/mysqld-exporter:latest
+    container_name: mysql-exporter
+    ports:
+      - "9104:9104"
+    environment:
+      - DATA_SOURCE_NAME=appuser:apppassword@(mysql:3306)/
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - monitoring
+    restart: unless-stopped
+    command:
+      - --collect.info_schema.innodb_metrics
+      - --collect.info_schema.innodb_tablespaces
+      - --collect.info_schema.processlist
+      - --collect.perf_schema.tableiowaits
+      - --collect.perf_schema.indexiowaits
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node-exporter
+    ports:
+      - "9100:9100"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    networks:
+      - monitoring
+    restart: unless-stopped
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/rootfs'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./paymentgateway/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./paymentgateway/monitoring/alert_rules.yml:/etc/prometheus/alert_rules.yml
+      - prometheus_data:/prometheus
+    networks:
+      - monitoring
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+      - '--storage.tsdb.wal-compression'
+    depends_on:
+      # - paymentgateway
+      - mysql-exporter
+      - node-exporter
+
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: alertmanager
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./paymentgateway/monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml
+      - alertmanager_data:/alertmanager
+    networks:
+      - monitoring
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+      - '--web.external-url=http://localhost:9093'
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+      - GF_SECURITY_ADMIN_USER=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./paymentgateway/monitoring/grafana/dashboards:/var/lib/grafana/dashboards
+      - ./paymentgateway/monitoring/grafana/provisioning:/etc/grafana/provisioning
+    networks:
+      - monitoring
+    restart: unless-stopped
+    depends_on:
+      - prometheus
 
   rabbitmq:
     image: rabbitmq:3-management
     container_name: rabbitmq
-    restart: always
+    restart: unless-stopped
     environment:
       RABBITMQ_DEFAULT_USER: admin
       RABBITMQ_DEFAULT_PASS: adminpassword
     ports:
-      - "5672:5672"   
-      - "15672:15672"
+      - "5672:5672"   # AMQP port
+      - "15672:15672" # Management UI
+      - "15692:15692" # Prometheus metrics
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
+      - ./paymentgateway/monitoring/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf
+    networks:
+      - monitoring
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 30s
+      timeout: 30s
+      retries: 3
+
+networks:
+  monitoring:
+    driver: bridge
+    name: monitoring-network
 
 volumes:
   mysql_data:
+    name: mysql_data
   rabbitmq_data:
+    name: rabbitmq_data
+  prometheus_data:
+    name: prometheus_data
+  grafana_data:
+    name: grafana_data
+  alertmanager_data:
+    name: alertmanager_data
