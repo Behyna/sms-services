@@ -11,8 +11,8 @@ import (
 
 type UserBalanceRepository interface {
 	Create(ub *model.UserBalance) error
-	FindByUserID(userID int64) (model.UserBalance, error)
-	UpdateBalance(userID int64, newBalance float64) error
+	FindByUserID(userID string) (model.UserBalance, error)
+	UpdateBalance(userID string, newBalance int64) error
 }
 
 type userBalance struct {
@@ -36,7 +36,7 @@ func (r *userBalance) Create(ub *model.UserBalance) error {
 	return nil
 }
 
-func (r *userBalance) FindByUserID(userID int64) (model.UserBalance, error) {
+func (r *userBalance) FindByUserID(userID string) (model.UserBalance, error) {
 	var ub model.UserBalance
 	if err := r.db.Where("user_id = ?", userID).First(&ub).Error; err != nil {
 		return model.UserBalance{}, err
@@ -44,7 +44,7 @@ func (r *userBalance) FindByUserID(userID int64) (model.UserBalance, error) {
 	return ub, nil
 }
 
-func (r *userBalance) UpdateBalance(userID int64, newBalance float64) error {
+func (r *userBalance) UpdateBalance(userID string, newBalance int64) error {
 	if err := r.db.Model(&model.UserBalance{}).
 		Where("user_id = ?", userID).
 		Update("balance", newBalance).Error; err != nil {

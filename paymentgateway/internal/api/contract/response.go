@@ -8,9 +8,9 @@ type ResponseError struct {
 }
 
 type Response struct {
-	Successful any `json:"successful"`
-	Code       any `json:"code"`
-	Message    any `json:"message,omitempty"`
-	TrackID    any `json:"x_track_id"`
-	Result     any `json:"result"`
+	Successful bool   `json:"successful"`
+	Code       string `json:"code"`
+	Message    string `json:"message,omitempty"`
+	TrackID    string `json:"x_track_id"`
+	Result     any    `json:"result"`
 }

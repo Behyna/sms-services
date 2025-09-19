@@ -13,10 +13,10 @@ import (
 )
 
 type UserBalanceService interface {
-	CreateUser(ctx context.Context, userID int64, initialBalance float64) (*model.UserBalance, error)
-	GetBalance(userID int64) (model.UserBalance, error)
-	IncreaseBalance(ctx context.Context, userID int64, amount float64) (*model.UserBalance, error)
-	DecreaseBalance(ctx context.Context, userID int64, amount float64) (*model.UserBalance, error)
+	CreateUser(ctx context.Context, cmd UserBalanceCommand) (*model.UserBalance, error)
+	GetBalance(userID string) (model.UserBalance, error)
+	IncreaseBalance(ctx context.Context, cmd UserBalanceCommand) (*model.UserBalance, error)
+	DecreaseBalance(ctx context.Context, cmd UserBalanceCommand) (*model.UserBalance, error)
 }
 
 type userBalanceService struct {
@@ -30,18 +30,18 @@ func NewUserBalanceService(userRepo repository.UserBalanceRepository, log *zap.L
 	return &userBalanceService{userRepo: userRepo, log: log, transactionRepo: transactionRepo, metrics: metrics}
 }
 
-func (s *userBalanceService) CreateUser(ctx context.Context, userID int64, initialBalance float64) (*model.UserBalance, error) {
+func (s *userBalanceService) CreateUser(ctx context.Context, cmd UserBalanceCommand) (*model.UserBalance, error) {
 	start := time.Now()
 	createAt := time.Now()
 	ub := &model.UserBalance{
-		UserID:    userID,
-		Balance:   initialBalance,
+		UserID:    cmd.UserID,
+		Balance:   cmd.Amount,
 		UpdatedAt: createAt,
 		CreatedAt: createAt,
 	}
 	transaction := &model.Transaction{
-		UserID:    userID,
-		Amount:    initialBalance,
+		UserID:    cmd.UserID,
+		Amount:    cmd.Amount,
 		TxType:    model.TxTypeIncrease,
 		CreatedAt: createAt,
 	}
@@ -69,8 +69,8 @@ func (s *userBalanceService) CreateUser(ctx context.Context, userID int64, initi
 	})
 	if err != nil {
 		s.log.Error("Failed to create user balance",
-			zap.Int64("user_id", userID),
-			zap.Float64("initial_balance", initialBalance),
+			zap.String("user_id", cmd.UserID),
+			zap.Int64("initial_balance", cmd.Amount),
 			zap.Duration("duration", time.Since(start)),
 			zap.Error(err),
 		)
@@ -78,15 +78,15 @@ func (s *userBalanceService) CreateUser(ctx context.Context, userID int64, initi
 	}
 
 	s.log.Info("User balance created successfully",
-		zap.Int64("user_id", userID),
-		zap.Float64("initial_balance", initialBalance),
+		zap.String("user_id", cmd.UserID),
+		zap.Int64("initial_balance", cmd.Amount),
 		zap.Duration("total_duration", time.Since(start)),
 	)
 
 	return ub, nil
 }
 
-func (s *userBalanceService) GetBalance(userID int64) (model.UserBalance, error) {
+func (s *userBalanceService) GetBalance(userID string) (model.UserBalance, error) {
 	start := time.Now()
 
 	userBalance, err := s.userRepo.FindByUserID(userID)
@@ -94,7 +94,7 @@ func (s *userBalanceService) GetBalance(userID int64) (model.UserBalance, error)
 
 	if err != nil {
 		s.log.Error("Failed to get user balance",
-			zap.Int64("user_id", userID),
+			zap.String("user_id", userID),
 			zap.Duration("duration", duration),
 			zap.Error(err),
 		)
@@ -103,19 +103,19 @@ func (s *userBalanceService) GetBalance(userID int64) (model.UserBalance, error)
 	}
 
 	s.metrics.RecordDBQuery("select", "user_balances", "success", duration)
-	s.metrics.UpdateUserBalance(fmt.Sprintf("%d", userID), userBalance.Balance)
+	s.metrics.UpdateUserBalance(fmt.Sprintf("%s", userID), userBalance.Balance)
 
 	s.log.Debug("User balance retrieved successfully",
-		zap.Int64("user_id", userID),
-		zap.Float64("balance", userBalance.Balance),
+		zap.String("user_id", userID),
+		zap.Int64("balance", userBalance.Balance),
 		zap.Duration("duration", duration),
 	)
 
 	return userBalance, nil
 }
 
-func (s *userBalanceService) IncreaseBalance(ctx context.Context, userID int64, amount float64) (*model.UserBalance, error) {
-	ub, err := s.userRepo.FindByUserID(userID)
+func (s *userBalanceService) IncreaseBalance(ctx context.Context, cmd UserBalanceCommand) (*model.UserBalance, error) {
+	ub, err := s.userRepo.FindByUserID(cmd.UserID)
 	if err != nil {
 		return nil, err
 	}
@@ -123,8 +123,8 @@ func (s *userBalanceService) IncreaseBalance(ctx context.Context, userID int64, 
 	err = s.transactionRepo.Transaction(ctx, func(ctx context.Context) error {
 		createdAt := time.Now()
 		transaction := &model.Transaction{
-			UserID:    userID,
-			Amount:    amount,
+			UserID:    cmd.UserID,
+			Amount:    cmd.Amount,
 			TxType:    model.TxTypeIncrease,
 			CreatedAt: createdAt,
 		}
@@ -133,7 +133,7 @@ func (s *userBalanceService) IncreaseBalance(ctx context.Context, userID int64, 
 			return err
 		}
 
-		ub.Balance += amount
+		ub.Balance += cmd.Amount
 		ub.UpdatedAt = createdAt
 
 		if err := s.userRepo.UpdateBalance(ub.UserID, ub.Balance); err != nil {
@@ -146,21 +146,21 @@ func (s *userBalanceService) IncreaseBalance(ctx context.Context, userID int64, 
 	return &ub, err
 }
 
-func (s *userBalanceService) DecreaseBalance(ctx context.Context, userID int64, amount float64) (*model.UserBalance, error) {
-	ub, err := s.userRepo.FindByUserID(userID)
+func (s *userBalanceService) DecreaseBalance(ctx context.Context, cmd UserBalanceCommand) (*model.UserBalance, error) {
+	ub, err := s.userRepo.FindByUserID(cmd.UserID)
 	if err != nil {
 		return nil, err
 	}
 
-	if ub.Balance-amount < 0 {
+	if ub.Balance-cmd.Amount < 0 {
 		return nil, constants.ErrInsufficientBalance
 	}
 
 	err = s.transactionRepo.Transaction(ctx, func(ctx context.Context) error {
 		createdAt := time.Now()
 		transaction := &model.Transaction{
-			UserID:    userID,
-			Amount:    amount,
+			UserID:    cmd.UserID,
+			Amount:    cmd.Amount,
 			TxType:    model.TxTypeDecrease,
 			CreatedAt: createdAt,
 		}
@@ -169,7 +169,7 @@ func (s *userBalanceService) DecreaseBalance(ctx context.Context, userID int64, 
 			return err
 		}
 
-		ub.Balance -= amount
+		ub.Balance -= cmd.Amount
 		ub.UpdatedAt = createdAt
 
 		if err := s.userRepo.UpdateBalance(ub.UserID, ub.Balance); err != nil {

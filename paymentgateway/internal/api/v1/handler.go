@@ -53,10 +53,12 @@ func (h *Handler) CreateUsersBalance(c *fiber.Ctx) error {
 		return c.JSON(responseError)
 	}
 
-	userID := handlerRequest.UserID
-	initialBalance := handlerRequest.InitialBalance
+	cmd := service.UserBalanceCommand{
+		UserID: handlerRequest.UserID,
+		Amount: handlerRequest.InitialBalance,
+	}
 
-	userBalance, err := h.userService.CreateUser(c.UserContext(), userID, initialBalance)
+	userBalance, err := h.userService.CreateUser(c.UserContext(), cmd)
 	if err != nil {
 		h.logger.Error("Error user service create balance", zap.Error(err))
 		h.metrics.RecordUserBalanceCreationError()
@@ -71,11 +73,11 @@ func (h *Handler) CreateUsersBalance(c *fiber.Ctx) error {
 	// Record successful metrics
 	h.metrics.RecordUserBalanceCreated()
 	h.metrics.RecordTransactionCreated("topup")
-	h.metrics.UpdateUserBalance(fmt.Sprintf("%d", userID), initialBalance)
+	h.metrics.UpdateUserBalance(fmt.Sprintf("%s", cmd.UserID), cmd.Amount)
 
 	h.logger.Info("User balance created successfully",
-		zap.Int64("user_id", userID),
-		zap.Float64("initial_balance", initialBalance),
+		zap.String("user_id", cmd.UserID),
+		zap.Int64("initial_balance", cmd.Amount),
 		zap.Duration("duration", time.Since(start)),
 	)
 
@@ -123,8 +125,8 @@ func (h *Handler) GetUserBalance(c *fiber.Ctx) error {
 	h.metrics.UpdateUserBalance(fmt.Sprintf("%d", handlerRequest.UserID), userBalance.Balance)
 
 	h.logger.Info("User balance retrieved successfully",
-		zap.Int64("user_id", handlerRequest.UserID),
-		zap.Float64("balance", userBalance.Balance),
+		zap.String("user_id", handlerRequest.UserID),
+		zap.Int64("balance", userBalance.Balance),
 		zap.Duration("duration", time.Since(start)),
 	)
 
@@ -150,7 +152,12 @@ func (h *Handler) UpdateUserBalance(c *fiber.Ctx) error {
 		return c.JSON(responseError)
 	}
 
-	userBalance, err := h.userService.IncreaseBalance(c.UserContext(), handlerRequest.UserID, handlerRequest.Amount)
+	cmd := service.UserBalanceCommand{
+		UserID: handlerRequest.UserID,
+		Amount: handlerRequest.Amount,
+	}
+
+	userBalance, err := h.userService.IncreaseBalance(c.UserContext(), cmd)
 	if err != nil {
 		h.logger.Error("Error updating user balance", zap.Error(err))
 		paymentErr.Successful = false
@@ -182,7 +189,12 @@ func (h *Handler) DecreaseUserBalance(c *fiber.Ctx) error {
 		return c.JSON(responseError)
 	}
 
-	userBalance, err := h.userService.DecreaseBalance(c.UserContext(), handlerRequest.UserID, handlerRequest.Amount)
+	cmd := service.UserBalanceCommand{
+		UserID: handlerRequest.UserID,
+		Amount: handlerRequest.Amount,
+	}
+
+	userBalance, err := h.userService.DecreaseBalance(c.UserContext(), cmd)
 	if err != nil {
 		h.logger.Error("Error updating user balance", zap.Error(err))
 		paymentErr.Successful = false

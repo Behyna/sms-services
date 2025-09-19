@@ -226,8 +226,8 @@ func (m *Metrics) RecordTransactionError(txType, errorType string) {
 	m.TransactionErrors.WithLabelValues(txType, errorType).Inc()
 }
 
-func (m *Metrics) UpdateUserBalance(userID string, balance float64) {
-	m.CurrentUserBalances.WithLabelValues(userID).Set(balance)
+func (m *Metrics) UpdateUserBalance(userID string, balance int64) {
+	m.CurrentUserBalances.WithLabelValues(userID).Set(float64(balance))
 }
 
 func (m *Metrics) RecordDBQuery(operation, table, status string, duration time.Duration) {
