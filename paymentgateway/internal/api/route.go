@@ -11,6 +11,6 @@ func SetupRoutes(app *fiber.App, handler *v1.Handler) {
 	app.Get("/ping", handler.Pong)
 	app.Post(prefixV1+"users", handler.CreateUsersBalance)
 	app.Post(prefixV1+"users/balance", handler.GetUserBalance)
-	app.Post(prefixV1+"user/increase/balance", handler.UpdateUserBalance)
+	app.Post(prefixV1+"user/increase/balance", handler.IncreaseUserBalance)
 	app.Post(prefixV1+"user/decrease/balance", handler.DecreaseUserBalance)
 }

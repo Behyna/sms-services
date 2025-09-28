@@ -3,9 +3,12 @@ package model
 import "time"
 
 type UserBalance struct {
-	ID        int64     `gorm:"primaryKey;autoIncrement"`
-	UserID    string    `gorm:"not null"`
-	Balance   int64     `gorm:"default:0"`
-	UpdatedAt time.Time `gorm:"default:CURRENT_TIMESTAMP"`
-	CreatedAt time.Time `gorm:"default:CURRENT_TIMESTAMP"`
+	UserID    string    `gorm:"column:user_id;primaryKey;type:char(11)"`
+	Balance   int64     `gorm:"column:balance;not null;default:0"`
+	UpdatedAt time.Time `gorm:"column:updated_at;default:CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"`
+	CreatedAt time.Time `gorm:"column:created_at;default:CURRENT_TIMESTAMP"`
+}
+
+func (UserBalance) TableName() string {
+	return "user_balances"
 }

@@ -9,6 +9,7 @@ import (
 	v1 "github.com/Behyna/sms-services/paymentgateway/internal/api/v1"
 	v2 "github.com/Behyna/sms-services/paymentgateway/internal/api/validator"
 	"github.com/Behyna/sms-services/paymentgateway/internal/config"
+	"github.com/Behyna/sms-services/paymentgateway/internal/errors"
 	"github.com/Behyna/sms-services/paymentgateway/internal/metrics"
 	"github.com/Behyna/sms-services/paymentgateway/internal/repository"
 	"github.com/Behyna/sms-services/paymentgateway/internal/service"
@@ -33,6 +34,7 @@ func main() {
 			metrics.NewMetrics,
 			v2.NewXValidator,
 
+			repository.NewTransactionManager,
 			repository.NewUserBalanceRepository,
 			repository.NewTransactionRepository,
 			service.NewUserBalanceService,
@@ -90,6 +92,7 @@ func NewConnectionDB(cfg *config.Config, logger *zap.Logger) (*gorm.DB, error) {
 func NewFiberApp(m *metrics.Metrics, logger *zap.Logger) *fiber.App {
 	app := fiber.New(fiber.Config{
 		ServerHeader: "PaymentGateway/1.0",
+		ErrorHandler: errors.ErrorHandler(),
 		AppName:      "SMS Payment Gateway",
 	})
 

@@ -35,44 +35,33 @@ func (h *Handler) Pong(c *fiber.Ctx) error {
 
 func (h *Handler) CreateUsersBalance(c *fiber.Ctx) error {
 	start := time.Now()
-	var (
-		paymentErr     contract.ResponseError
-		res            contract.Response
-		handlerRequest CreateUserBalanceRequest
-	)
 
-	// Record validation start time
+	var handlerRequest CreateUserBalanceRequest
 	validationStart := time.Now()
+
 	responseError := h.XValidator.Validator(&handlerRequest, constants.MessageErrorFormat, c)
 	h.metrics.RecordValidationDuration("create_user_balance", time.Since(validationStart))
 
-	if responseError != paymentErr {
+	if responseError.Code != "" {
 		h.logger.Error("Error Validator", zap.Any("request", handlerRequest))
 		h.metrics.RecordValidationError("user_balance", "validation_failed")
-		responseError.Code = constants.ValidationFailed
+		responseError.Code = constants.ErrCodeValidationFailed
 		return c.JSON(responseError)
 	}
 
 	cmd := service.UserBalanceCommand{
-		UserID: handlerRequest.UserID,
-		Amount: handlerRequest.InitialBalance,
+		UserID:         handlerRequest.UserID,
+		Amount:         handlerRequest.InitialBalance,
+		IdempotencyKey: handlerRequest.IdempotencyKey,
 	}
 
 	userBalance, err := h.userService.CreateUser(c.UserContext(), cmd)
 	if err != nil {
-		h.logger.Error("Error user service create balance", zap.Error(err))
-		h.metrics.RecordUserBalanceCreationError()
-		h.metrics.RecordTransactionError("topup", "creation_failed")
-		paymentErr.Successful = true
-		paymentErr.Code = "duplicate"
-		paymentErr.Message = "user  balance already exists"
-		paymentErr.Error = err.Error()
-		return c.JSON(paymentErr)
+		return err
 	}
 
-	// Record successful metrics
 	h.metrics.RecordUserBalanceCreated()
-	h.metrics.RecordTransactionCreated("topup")
+	h.metrics.RecordTransactionCreated("increase")
 	h.metrics.UpdateUserBalance(fmt.Sprintf("%s", cmd.UserID), cmd.Amount)
 
 	h.logger.Info("User balance created successfully",
@@ -81,31 +70,24 @@ func (h *Handler) CreateUsersBalance(c *fiber.Ctx) error {
 		zap.Duration("duration", time.Since(start)),
 	)
 
-	res.Successful = true
-	res.Code = "success"
-	res.Message = "user balance created successfully"
-	res.Result = userBalance
-
-	return c.JSON(res)
+	return c.JSON(contract.Response{Code: "success", Message: constants.UserBalanceCreated, Result: userBalance})
 }
 
 func (h *Handler) GetUserBalance(c *fiber.Ctx) error {
 	start := time.Now()
 	var (
-		paymentErr     contract.ResponseError
 		res            contract.Response
 		handlerRequest GetUserBalanceRequest
 	)
 
-	// Record validation start time
 	validationStart := time.Now()
 	responseError := h.XValidator.Validator(&handlerRequest, constants.MessageErrorFormat, c)
 	h.metrics.RecordValidationDuration("get_user_balance", time.Since(validationStart))
 
-	if responseError != paymentErr {
+	if responseError.Code != "" {
 		h.logger.Error("Error Validator", zap.Any("request", handlerRequest))
 		h.metrics.RecordValidationError("user_balance", "validation_failed")
-		responseError.Code = constants.ValidationFailed
+		responseError.Code = constants.ErrCodeValidationFailed
 		return c.JSON(responseError)
 	}
 
@@ -113,14 +95,10 @@ func (h *Handler) GetUserBalance(c *fiber.Ctx) error {
 	if err != nil {
 		h.logger.Error("Error getting user balance", zap.Error(err))
 		h.metrics.RecordBalanceRetrieval("error")
-		paymentErr.Successful = false
-		paymentErr.Code = "not_found"
-		paymentErr.Message = "user balance not found"
-		paymentErr.Error = err.Error()
-		return c.JSON(paymentErr)
+
+		return err
 	}
 
-	// Record successful balance retrieval
 	h.metrics.RecordBalanceRetrieval("success")
 	h.metrics.UpdateUserBalance(fmt.Sprintf("%d", handlerRequest.UserID), userBalance.Balance)
 
@@ -130,83 +108,58 @@ func (h *Handler) GetUserBalance(c *fiber.Ctx) error {
 		zap.Duration("duration", time.Since(start)),
 	)
 
-	res.Successful = true
 	res.Code = "success"
 	res.Message = "user balance retrieved successfully"
 	res.Result = userBalance
 	return c.JSON(res)
 }
 
-func (h *Handler) UpdateUserBalance(c *fiber.Ctx) error {
-	var (
-		paymentErr     contract.ResponseError
-		res            contract.Response
-		handlerRequest UpdateUserBalanceRequest
-	)
-
+func (h *Handler) IncreaseUserBalance(c *fiber.Ctx) error {
+	var handlerRequest UpdateUserBalanceRequest
 	responseError := h.XValidator.Validator(&handlerRequest, constants.MessageErrorFormat, c)
 
-	if responseError != paymentErr {
+	if responseError.Code != "" {
 		h.logger.Error("Error Validator", zap.Any("request", handlerRequest))
-		responseError.Code = constants.ValidationFailed
+		responseError.Code = constants.ErrCodeValidationFailed
 		return c.JSON(responseError)
 	}
 
 	cmd := service.UserBalanceCommand{
-		UserID: handlerRequest.UserID,
-		Amount: handlerRequest.Amount,
+		UserID:         handlerRequest.UserID,
+		Amount:         handlerRequest.Amount,
+		IdempotencyKey: handlerRequest.IdempotencyKey,
 	}
 
 	userBalance, err := h.userService.IncreaseBalance(c.UserContext(), cmd)
 	if err != nil {
-		h.logger.Error("Error updating user balance", zap.Error(err))
-		paymentErr.Successful = false
-		paymentErr.Code = "not_found"
-		paymentErr.Message = "user balance not found"
-		paymentErr.Error = err.Error()
-		return c.JSON(paymentErr)
+		return err
 	}
 
-	res.Successful = true
-	res.Code = "success"
-	res.Message = "user balance updated successfully"
-	res.Result = userBalance
-	return c.JSON(res)
+	return c.JSON(contract.Response{Code: "success", Message: constants.UserBalanceUpdated, Result: userBalance})
 }
 
 func (h *Handler) DecreaseUserBalance(c *fiber.Ctx) error {
-	var (
-		paymentErr     contract.ResponseError
-		res            contract.Response
-		handlerRequest UpdateUserBalanceRequest
-	)
+	var handlerRequest UpdateUserBalanceRequest
 
 	responseError := h.XValidator.Validator(&handlerRequest, constants.MessageErrorFormat, c)
 
-	if responseError != paymentErr {
+	if responseError.Code != "" {
 		h.logger.Error("Error Validator", zap.Any("request", handlerRequest))
-		responseError.Code = constants.ValidationFailed
+		responseError.Code = constants.ErrCodeValidationFailed
 		return c.JSON(responseError)
 	}
 
 	cmd := service.UserBalanceCommand{
-		UserID: handlerRequest.UserID,
-		Amount: handlerRequest.Amount,
+		UserID:         handlerRequest.UserID,
+		Amount:         handlerRequest.Amount,
+		IdempotencyKey: handlerRequest.IdempotencyKey,
 	}
 
 	userBalance, err := h.userService.DecreaseBalance(c.UserContext(), cmd)
 	if err != nil {
 		h.logger.Error("Error updating user balance", zap.Error(err))
-		paymentErr.Successful = false
-		paymentErr.Code = "not_found"
-		paymentErr.Message = "user balance not found"
-		paymentErr.Error = err.Error()
-		return c.JSON(paymentErr)
+		return err
 	}
 
-	res.Successful = true
-	res.Code = "success"
-	res.Message = "user balance updated successfully"
-	res.Result = userBalance
-	return c.JSON(res)
+	return c.JSON(contract.Response{Code: "success", Message: constants.UserBalanceUpdated, Result: userBalance})
 }
