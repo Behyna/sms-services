@@ -25,9 +25,7 @@ func main() {
 			NewMQConnection,
 			NewMQPublisher,
 
-			repository.NewTransactionManager,
 			repository.NewTxLogRepository,
-			repository.NewMessageRepository,
 
 			service.NewMessageQueueService,
 

@@ -54,6 +54,7 @@ func (m *messageWorkflow) CreateMessage(ctx context.Context, cmd CreateMessageCo
 	m.logger.Error("Critical: Payment succeeded but message creation failed, initiating refund",
 		zap.String("clientMessageID", cmd.ClientMessageID))
 
+	idempotencyKey = fmt.Sprintf("refund-%s-%s", cmd.FromMSISDN, cmd.ClientMessageID)
 	refundReq := RefundPaymentCommand{UserID: cmd.FromMSISDN, Amount: request.Amount, IdempotencyKey: idempotencyKey}
 
 	refundErr := m.payment.Refund(ctx, refundReq)
@@ -78,7 +79,7 @@ func (m *messageWorkflow) SendMessage(ctx context.Context, cmd SendMessageComman
 			zap.Int64("messageID", cmd.MessageID),
 			zap.Error(err))
 
-		if errors.Is(err, ErrDatabase) || errors.Is(err, ErrUnknownMessageStatus) {
+		if errors.Is(err, ErrDatabase) {
 			return mq.Temporary(err)
 		}
 
@@ -115,7 +116,6 @@ func (m *messageWorkflow) SendMessage(ctx context.Context, cmd SendMessageComman
 		zap.Int64("messageID", cmd.MessageID),
 		zap.Int("attempt", attemptCount),
 		zap.Int("maxRetries", maxRetries),
-		//TODO: fix PII Security Issue
 		zap.String("to", cmd.ToMSISDN),
 		zap.String("from", cmd.FromMSISDN))
 

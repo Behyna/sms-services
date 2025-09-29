@@ -17,15 +17,12 @@ type MessageQueueService interface {
 }
 
 type messageQueue struct {
-	txManager repository.TxManager
-	message   repository.MessageRepository
-	txLog     repository.TxLogRepository
-	logger    *zap.Logger
+	txLog  repository.TxLogRepository
+	logger *zap.Logger
 }
 
-func NewMessageQueueService(txManager repository.TxManager, messageRepo repository.MessageRepository,
-	txLogRepo repository.TxLogRepository, logger *zap.Logger) MessageQueueService {
-	return &messageQueue{txManager: txManager, message: messageRepo, txLog: txLogRepo, logger: logger}
+func NewMessageQueueService(txLogRepo repository.TxLogRepository, logger *zap.Logger) MessageQueueService {
+	return &messageQueue{txLog: txLogRepo, logger: logger}
 }
 
 func (m *messageQueue) FindMessagesToQueue(ctx context.Context, limit int) ([]SendMessageCommand, error) {
@@ -57,41 +54,26 @@ func (m *messageQueue) FindMessagesToQueue(ctx context.Context, limit int) ([]Se
 }
 
 func (m *messageQueue) MarkMessageAsQueued(ctx context.Context, messageID int64) error {
-	return m.txManager.WithTx(ctx, func(ctx context.Context) error {
-		msg := model.Message{
-			ID:        messageID,
-			Status:    model.MessageStatusQueued,
-			UpdatedAt: time.Now(),
-		}
+	publishedAt := time.Now()
+	txLog := model.TxLog{
+		MessageID:   messageID,
+		State:       model.TxLogStatePending,
+		Published:   true,
+		PublishedAt: &publishedAt,
+		UpdatedAt:   time.Now(),
+	}
 
-		if err := m.message.Update(ctx, &msg); err != nil {
-			m.logger.Error("Failed to update message status to QUEUED",
-				zap.Error(err),
-				zap.Int64("messageID", messageID))
-			return err
-		}
-
-		publishedAt := time.Now()
-		txLog := model.TxLog{
-			MessageID:   messageID,
-			State:       model.TxLogStatePending,
-			Published:   true,
-			PublishedAt: &publishedAt,
-			UpdatedAt:   time.Now(),
-		}
-
-		if err := m.txLog.UpdateByMessageID(ctx, &txLog); err != nil {
-			m.logger.Error("Failed to update tx_log to published",
-				zap.Error(err),
-				zap.Int64("messageID", messageID))
-			return err
-		}
-
-		m.logger.Debug("Successfully marked message as published",
+	if err := m.txLog.UpdateByMessageID(ctx, &txLog); err != nil {
+		m.logger.Error("Failed to update tx_log to published",
+			zap.Error(err),
 			zap.Int64("messageID", messageID))
+		return err
+	}
 
-		return nil
-	})
+	m.logger.Debug("Successfully marked message as published",
+		zap.Int64("messageID", messageID))
+
+	return nil
 }
 
 func (m *messageQueue) FindRefundsToQueue(ctx context.Context, limit int) ([]ProcessRefundCommand, error) {

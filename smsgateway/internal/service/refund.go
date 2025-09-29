@@ -45,7 +45,7 @@ func (r *Refund) Refund(ctx context.Context, cmd ProcessRefundCommand) error {
 			zap.Int64("messageID", cmd.MessageID),
 			zap.Error(err))
 
-		if errors.Is(err, ErrDatabase) || errors.Is(err, ErrUnknownTxState) {
+		if errors.Is(err, ErrDatabase) {
 			return mq.Temporary(err)
 		}
 
@@ -101,21 +101,20 @@ func (r *Refund) getRefundableTransaction(ctx context.Context, txLogID int64) (*
 		return nil, ErrDatabase
 	}
 
-	if !txLog.Published {
-		return nil, ErrTxLogNotReady
-	}
-
 	switch txLog.State {
 	case model.TxLogStateCreated, model.TxLogStatePending, model.TxLogStateSuccess:
 		r.logger.Warn("Transaction not in refundable state",
 			zap.Int64("txLogID", txLogID),
 			zap.String("state", txLog.State))
 		return nil, ErrTxInvalidState
+
 	case model.TxLogStateFailed:
 		return txLog, nil
+
 	case model.TxLogStateRefunded:
 		r.logger.Info("Transaction already refunded", zap.Int64("txLogID", txLogID))
 		return nil, ErrRefundAlreadyProcessed
+
 	default:
 		r.logger.Error("Unknown transaction state",
 			zap.String("state", txLog.State),

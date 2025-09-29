@@ -4,7 +4,7 @@ CREATE TABLE messages (
     from_msisdn      VARCHAR(255) NOT NULL,
     to_msisdn        VARCHAR(255) NOT NULL,
     text             TEXT NOT NULL,
-    status           ENUM('CREATED','QUEUED','SENDING','SUBMITTED','FAILED_TEMP','FAILED_PERM','REFUNDED') NOT NULL DEFAULT 'QUEUED',
+    status           ENUM('CREATED','SENDING','SUBMITTED','FAILED_TEMP','FAILED_PERM','REFUNDED') NOT NULL DEFAULT 'CREATED',
     attempt_count    INT NOT NULL DEFAULT 0,
     last_attempt_at  TIMESTAMP NULL,
     provider         VARCHAR(255),

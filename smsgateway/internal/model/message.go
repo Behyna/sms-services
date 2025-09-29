@@ -6,7 +6,6 @@ type MessageStatus string
 
 const (
 	MessageStatusCreated    MessageStatus = "CREATED"
-	MessageStatusQueued     MessageStatus = "QUEUED"
 	MessageStatusSending    MessageStatus = "SENDING"
 	MessageStatusSubmitted  MessageStatus = "SUBMITTED"
 	MessageStatusFailedTemp MessageStatus = "FAILED_TEMP"

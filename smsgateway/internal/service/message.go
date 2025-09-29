@@ -104,8 +104,7 @@ func (m *message) GetMessageForProcessing(ctx context.Context, messageID int64) 
 
 	switch msg.Status {
 	case model.MessageStatusCreated:
-		m.logger.Warn("Message not properly queued by publisher", zap.Int64("messageID", messageID))
-		return nil, ErrMessageNotReady
+		return msg, nil
 
 	case model.MessageStatusSending:
 		if msg.LastAttemptAt != nil && time.Since(*msg.LastAttemptAt) < 5*time.Minute {
@@ -117,24 +116,14 @@ func (m *message) GetMessageForProcessing(ctx context.Context, messageID int64) 
 
 		return msg, nil
 
-	case model.MessageStatusQueued:
-		return msg, nil
-
-	case model.MessageStatusSubmitted:
-		m.logger.Info("Message already sent successfully", zap.Int64("messageID", messageID))
+	case model.MessageStatusSubmitted, model.MessageStatusFailedPerm, model.MessageStatusRefunded:
+		m.logger.Info("Message already processed successfully",
+			zap.Int64("messageID", messageID), zap.String("status", string(msg.Status)))
 		return nil, ErrMessageAlreadyProcessed
 
 	case model.MessageStatusFailedTemp:
 		m.logger.Info("Message was temporarily failed, retrying", zap.Int64("messageID", messageID))
 		return msg, nil
-
-	case model.MessageStatusFailedPerm:
-		m.logger.Info("Message already failed permanently", zap.Int64("messageID", messageID))
-		return nil, ErrMessageAlreadyProcessed
-
-	case model.MessageStatusRefunded:
-		m.logger.Info("Message already refunded", zap.Int64("messageID", messageID))
-		return nil, ErrMessageAlreadyProcessed
 
 	default:
 		m.logger.Error("Unknown message status",

@@ -51,7 +51,7 @@ func (m *Message) UpdateForSending(ctx context.Context, message *model.Message, 
 	db := GetTx(ctx, m.db)
 	result := db.Model(message).Where("ID = ? AND (status IN (?, ?) OR (status = ? AND last_attempt_at < ?))",
 		message.ID,
-		model.MessageStatusQueued,
+		model.TxLogStateCreated,
 		model.MessageStatusFailedTemp,
 		model.MessageStatusSending,
 		staleThreshold).Updates(message)
