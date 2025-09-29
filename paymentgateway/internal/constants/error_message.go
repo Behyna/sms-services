@@ -3,11 +3,11 @@ package constants
 const MessageErrorFormat = "The '%s' format is invalid"
 
 const (
-	ErrCodeUserExisted         = "user_already_exists"
-	ErrCodeUserNotFound        = "user_not_found"
-	ErrCodeOperationFailed     = "operation_failed"
-	ErrCodeInsufficientBalance = "insufficient_balance"
-	ErrCodeValidationFailed    = "validation_failed"
+	ErrCodeUserExisted         = "USER_ALREADY_EXISTS"
+	ErrCodeUserNotFound        = "USER_NOT_FOUND"
+	ErrCodeOperationFailed     = "OPERATION_FAILED"
+	ErrCodeInsufficientBalance = "INSUFFICIENT_BALANCE"
+	ErrCodeValidationFailed    = "VALIDATION_FAILED"
 )
 
 const (
@@ -20,7 +20,6 @@ const (
 var errorMessages = map[string]string{
 	ErrCodeUserExisted:         ErrMsgUserExisted,
 	ErrCodeUserNotFound:        ErrMsgUserNotFound,
-	ErrCodeOperationFailed:     ErrMsgOperationFailed,
 	ErrCodeInsufficientBalance: ErrMsgInsufficientBalance,
 }
 
