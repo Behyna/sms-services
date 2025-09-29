@@ -1,14 +1,9 @@
-version: "3.9"
-
 services:
   mysql:
     image: mysql:8.0
     container_name: mysql
     environment:
       MYSQL_ROOT_PASSWORD: rootpassword
-      MYSQL_DATABASE: smsgateway
-      MYSQL_USER: appuser
-      MYSQL_PASSWORD: apppassword
     ports:
       - "3306:3306"
     volumes:
@@ -21,51 +16,165 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      
-      
-  # paymentgateway:
-  #   build: ./paymentgateway
-  #   container_name: paymentgateway
-  #   ports:
-  #     - "8082:8082"
-  #   depends_on:
-  #     mysql:
-  #       condition: service_healthy
-  #   environment:
-  #     - DATABASE_HOST=mysql
-  #     - DATABASE_PORT=3306
-  #     - DATABASE_USER=root
-  #     - DATABASE_PASSWORD=rootpassword
-  #     - DATABASE_NAME=paymentgateway
-  #   networks:
-  #     - monitoring
-  #   restart: unless-stopped
-  #   healthcheck:
-  #     test: ["CMD", "curl", "-f", "http://localhost:8082/healthz"]
-  #     interval: 30s
-  #     timeout: 10s
-  #     retries: 3
-
-
-  mysql-exporter:
-    image: prom/mysqld-exporter:latest
-    container_name: mysql-exporter
-    ports:
-      - "9104:9104"
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    restart: unless-stopped
     environment:
-      - DATA_SOURCE_NAME=appuser:apppassword@(mysql:3306)/
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: adminpassword
+    ports:
+      - "5672:5672"   # AMQP port
+      - "15672:15672" # Management UI
+      - "15692:15692" # Prometheus metrics
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    #      - ./paymentgateway/monitoring/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf
+    networks:
+      - monitoring
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 30s
+      timeout: 30s
+      retries: 3
+
+  paymentgateway:
+    build:
+      context: ./paymentgateway
+      dockerfile: Dockerfile
+    container_name: paymentgateway
+    ports:
+      - "8082:8082"
     depends_on:
       mysql:
         condition: service_healthy
+    environment:
+      - DATABASE_HOST=mysql
+      - DATABASE_PASSWORD=rootpassword
     networks:
       - monitoring
     restart: unless-stopped
-    command:
-      - --collect.info_schema.innodb_metrics
-      - --collect.info_schema.innodb_tablespaces
-      - --collect.info_schema.processlist
-      - --collect.perf_schema.tableiowaits
-      - --collect.perf_schema.indexiowaits
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8082/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  smsgateway-api:
+    build:
+      context: ./smsgateway
+      dockerfile: Dockerfile
+      args:
+        SERVICE: api
+    container_name: smsgateway-api
+#    image: smsgateway-api:latest
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      paymentgateway:
+        condition: service_healthy
+    environment:
+      - DATABASE_HOST=mysql
+      - DATABASE_PASSWORD=rootpassword
+      - RABBITMQ_URL=amqp://admin:adminpassword@rabbitmq:5672/
+      - PAYMENT_GATEWAY_BASE_URL=http://paymentgateway:8082/api/v1
+    networks:
+      - monitoring
+    restart: unless-stopped
+
+  smsgateway-worker-send:
+    build:
+      context: ./smsgateway
+      dockerfile: Dockerfile
+      args:
+        SERVICE: worker-send
+    container_name: smsgateway-worker-send
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      paymentgateway:
+        condition: service_healthy
+      smsgateway-api:
+        condition: service_started
+    environment:
+      - DATABASE_HOST=mysql
+      - DATABASE_PASSWORD=rootpassword
+      - RABBITMQ_URL=amqp://admin:adminpassword@rabbitmq:5672/
+      - PAYMENT_GATEWAY_BASE_URL=http://paymentgateway:8082/api/v1
+    networks:
+      - monitoring
+    restart: unless-stopped
+
+  smsgateway-worker-send-publisher:
+    build:
+      context: ./smsgateway
+      dockerfile: Dockerfile
+      args:
+        SERVICE: worker-send-publisher
+    container_name: smsgateway-worker-send-publisher
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - DATABASE_HOST=mysql
+      - DATABASE_PASSWORD=rootpassword
+      - RABBITMQ_URL=amqp://admin:adminpassword@rabbitmq:5672/
+    networks:
+      - monitoring
+    restart: unless-stopped
+
+  smsgateway-worker-refund:
+    build:
+      context: ./smsgateway
+      dockerfile: Dockerfile
+      args:
+        SERVICE: worker-refund
+    container_name: smsgateway-worker-refund
+#    image: smsgateway-worker-refund:latest
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      paymentgateway:
+        condition: service_healthy
+    environment:
+      - DATABASE_HOST=mysql
+      - DATABASE_PASSWORD=rootpassword
+      - RABBITMQ_URL=amqp://admin:adminpassword@rabbitmq:5672/
+      - PAYMENT_GATEWAY_BASE_URL=http://paymentgateway:8082/api/v1
+    networks:
+      - monitoring
+    restart: unless-stopped
+
+  smsgateway-worker-refund-publisher:
+    build:
+      context: ./smsgateway
+      dockerfile: Dockerfile
+      args:
+        SERVICE: worker-refund-publisher
+    container_name: smsgateway-worker-refund-publisher
+#    image: smsgateway-worker-refund-publisher:latest
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - DATABASE_HOST=mysql
+      - DATABASE_PASSWORD=rootpassword
+      - RABBITMQ_URL=amqp://admin:adminpassword@rabbitmq:5672/
+    networks:
+      - monitoring
+    restart: unless-stopped
 
   node-exporter:
     image: prom/node-exporter:latest
@@ -108,24 +217,7 @@ services:
       - '--storage.tsdb.wal-compression'
     depends_on:
       # - paymentgateway
-      - mysql-exporter
       - node-exporter
-
-  alertmanager:
-    image: prom/alertmanager:latest
-    container_name: alertmanager
-    ports:
-      - "9093:9093"
-    volumes:
-      - ./paymentgateway/monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml
-      - alertmanager_data:/alertmanager
-    networks:
-      - monitoring
-    restart: unless-stopped
-    command:
-      - '--config.file=/etc/alertmanager/alertmanager.yml'
-      - '--storage.path=/alertmanager'
-      - '--web.external-url=http://localhost:9093'
 
   grafana:
     image: grafana/grafana:latest
@@ -145,28 +237,6 @@ services:
     restart: unless-stopped
     depends_on:
       - prometheus
-
-  rabbitmq:
-    image: rabbitmq:3-management
-    container_name: rabbitmq
-    restart: unless-stopped
-    environment:
-      RABBITMQ_DEFAULT_USER: admin
-      RABBITMQ_DEFAULT_PASS: adminpassword
-    ports:
-      - "5672:5672"   # AMQP port
-      - "15672:15672" # Management UI
-      - "15692:15692" # Prometheus metrics
-    volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
-      - ./paymentgateway/monitoring/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf
-    networks:
-      - monitoring
-    healthcheck:
-      test: rabbitmq-diagnostics -q ping
-      interval: 30s
-      timeout: 30s
-      retries: 3
 
 networks:
   monitoring:
