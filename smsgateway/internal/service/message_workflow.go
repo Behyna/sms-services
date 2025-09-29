@@ -63,8 +63,6 @@ func (m *messageWorkflow) CreateMessage(ctx context.Context, cmd CreateMessageCo
 			zap.String("clientMessageID", cmd.ClientMessageID))
 
 		// TODO: alerting for manual investigation
-		// TODO: what to return
-		return CreateMessageResponse{}, err
 	}
 
 	m.logger.Warn("Payment refunded after DB failure", zap.String("clientMessageID", cmd.ClientMessageID))

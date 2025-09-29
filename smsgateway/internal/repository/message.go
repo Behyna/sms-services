@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Behyna/sms-services/smsgateway/internal/model"
+	"github.com/go-sql-driver/mysql"
 	"gorm.io/gorm"
 )
 
@@ -35,7 +36,8 @@ func (m *Message) Create(ctx context.Context, message *model.Message) error {
 		return nil
 	}
 
-	if errors.Is(err, gorm.ErrDuplicatedKey) {
+	var mysqlErr *mysql.MySQLError
+	if errors.As(err, &mysqlErr) && mysqlErr.Number == 1062 {
 		return ErrMessageDuplicate
 	}
 

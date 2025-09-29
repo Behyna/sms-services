@@ -93,10 +93,11 @@ func (m *messageQueue) FindRefundsToQueue(ctx context.Context, limit int) ([]Pro
 	refundRequests := make([]ProcessRefundCommand, 0, len(failedTxLogs))
 	for _, txLog := range failedTxLogs {
 		refundRequest := ProcessRefundCommand{
-			TxLogID:    txLog.ID,
-			MessageID:  txLog.MessageID,
-			FromMSISDN: txLog.FromMSISDN,
-			Amount:     txLog.Amount,
+			TxLogID:         txLog.ID,
+			MessageID:       txLog.MessageID,
+			FromMSISDN:      txLog.FromMSISDN,
+			Amount:          txLog.Amount,
+			ClientMessageID: txLog.Message.ClientMessageID,
 		}
 
 		refundRequests = append(refundRequests, refundRequest)

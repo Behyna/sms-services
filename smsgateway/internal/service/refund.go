@@ -55,7 +55,7 @@ func (r *Refund) Refund(ctx context.Context, cmd ProcessRefundCommand) error {
 	pgRequest := RefundPaymentCommand{
 		UserID:         cmd.FromMSISDN,
 		Amount:         int64(cmd.Amount),
-		IdempotencyKey: fmt.Sprintf("refund-%d", cmd.MessageID),
+		IdempotencyKey: fmt.Sprintf("refund-%s-%s", cmd.FromMSISDN, cmd.ClientMessageID),
 	}
 
 	err = r.payment.Refund(ctx, pgRequest)

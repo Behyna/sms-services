@@ -55,7 +55,7 @@ func (r *TxLog) UpdateForPermFailed(ctx context.Context, log *model.TxLog) error
 func (r *TxLog) FindUnpublishedFailed(limit int) ([]model.TxLog, error) {
 	var txLogs []model.TxLog
 
-	err := r.db.Where("state = ? AND published = ?",
+	err := r.db.Preload("Message").Where("state = ? AND published = ?",
 		model.TxLogStateFailed, false).Limit(limit).Find(&txLogs).Error
 
 	if err != nil {

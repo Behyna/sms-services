@@ -43,8 +43,9 @@ type RefundPaymentCommand struct {
 }
 
 type ProcessRefundCommand struct {
-	TxLogID    int64  `json:"tx_log_id"`
-	MessageID  int64  `json:"message_id"`
-	FromMSISDN string `json:"from_msisdn"`
-	Amount     int    `json:"amount"`
+	TxLogID         int64  `json:"tx_log_id"`
+	MessageID       int64  `json:"message_id"`
+	ClientMessageID string `json:"client_message_id"`
+	FromMSISDN      string `json:"from_msisdn"`
+	Amount          int    `json:"amount"`
 }
