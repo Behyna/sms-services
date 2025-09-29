@@ -12,7 +12,6 @@ import (
 	"github.com/Behyna/sms-services/smsgateway/internal/repository"
 	"github.com/Behyna/sms-services/smsgateway/internal/service"
 	"github.com/Behyna/sms-services/smsgateway/pkg/paymentgateway"
-	"github.com/Behyna/sms-services/smsgateway/pkg/smsprovider"
 	"github.com/gofiber/fiber/v2"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
@@ -25,21 +24,14 @@ func main() {
 			config.Load,
 			zap.NewProduction,
 			NewFiberApp,
-
 			NewConnectionDB,
 
 			repository.NewMessageRepository,
 			repository.NewTxLogRepository,
 			repository.NewTransactionManager,
-
-			NewSMSProvider,
 			NewPaymentGateway,
-
 			service.NewPaymentService,
-			service.NewProviderService,
 			service.NewMessageService,
-
-			service.NewMessageWorkflowService,
 
 			v1.NewHandler,
 		),
@@ -73,11 +65,6 @@ func NewConnectionDB(cfg *config.Config, logger *zap.Logger) (*gorm.DB, error) {
 	return mysql.NewConnection(ctx, cfg.Database, logger)
 }
 
-func NewSMSProvider(cfg *config.Config) smsprovider.Provider {
-	client := httpclient.NewHTTPClient(cfg.Provider.Timeout)
-	return smsprovider.NewSMSProvider(cfg.Provider, client)
-}
-
 func NewPaymentGateway(cfg *config.Config) paymentgateway.PaymentGateway {
 	client := httpclient.NewHTTPClient(cfg.PaymentGateway.Timeout)
 	return paymentgateway.NewPaymentGateway(cfg.PaymentGateway, client)
@@ -87,14 +74,4 @@ func NewFiberApp() *fiber.App {
 	return fiber.New(fiber.Config{
 		ErrorHandler: middleware.ErrorHandler(),
 	})
-}
-
-func initLogger() (*zap.Logger, error) {
-	config := zap.NewProductionConfig()
-
-	config.Level = zap.NewAtomicLevelAt(zap.DebugLevel)
-
-	config.Encoding = "console"
-
-	return config.Build()
 }

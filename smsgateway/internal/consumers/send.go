@@ -14,12 +14,12 @@ type SendConsumer interface {
 }
 
 type sendConsumer struct {
-	service  service.MessageWorkflowService
+	service  service.SendService
 	consumer mq.Consumer
 	logger   *zap.Logger
 }
 
-func NewSendConsumer(service service.MessageWorkflowService, consumer mq.Consumer, logger *zap.Logger) SendConsumer {
+func NewSendConsumer(service service.SendService, consumer mq.Consumer, logger *zap.Logger) SendConsumer {
 	return &sendConsumer{
 		service:  service,
 		consumer: consumer,

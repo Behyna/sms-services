@@ -14,6 +14,12 @@ type SendMessageCommand struct {
 	Text       string `json:"text"`
 }
 
+type GetMessagesQuery struct {
+	UserID string
+	Limit  int
+	Offset int
+}
+
 type UpdateMessageToSendingCommand struct {
 	MessageID    int64
 	AttemptCount int

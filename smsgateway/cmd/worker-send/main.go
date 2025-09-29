@@ -10,7 +10,6 @@ import (
 	"github.com/Behyna/sms-services/smsgateway/internal/consumers"
 	"github.com/Behyna/sms-services/smsgateway/internal/repository"
 	"github.com/Behyna/sms-services/smsgateway/internal/service"
-	"github.com/Behyna/sms-services/smsgateway/pkg/paymentgateway"
 	"github.com/Behyna/sms-services/smsgateway/pkg/smsprovider"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
@@ -22,24 +21,17 @@ func main() {
 		fx.Provide(
 			config.Load,
 			zap.NewProduction,
-
 			NewConnectionDB,
-
 			NewMQConnection,
 			NewMQConsumer,
 
 			repository.NewMessageRepository,
 			repository.NewTxLogRepository,
 			repository.NewTransactionManager,
-
 			NewSMSProvider,
-			NewPaymentGateway,
-
-			service.NewMessageService,
 			service.NewProviderService,
-			service.NewPaymentService,
+			service.NewSendService,
 
-			service.NewMessageWorkflowService,
 			consumers.NewSendConsumer,
 		),
 		fx.Invoke(runSendConsumer),
@@ -83,11 +75,6 @@ func NewConnectionDB(cfg *config.Config, logger *zap.Logger) (*gorm.DB, error) {
 func NewSMSProvider(cfg *config.Config) smsprovider.Provider {
 	client := httpclient.NewHTTPClient(cfg.Provider.Timeout)
 	return smsprovider.NewSMSProvider(cfg.Provider, client)
-}
-
-func NewPaymentGateway(cfg *config.Config) paymentgateway.PaymentGateway {
-	client := httpclient.NewHTTPClient(cfg.PaymentGateway.Timeout)
-	return paymentgateway.NewPaymentGateway(cfg.PaymentGateway, client)
 }
 
 func NewMQConnection(cfg *config.Config, logger *zap.Logger) (*mq.RabbitMQ, error) {

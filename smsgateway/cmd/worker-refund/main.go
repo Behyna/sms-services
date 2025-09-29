@@ -21,18 +21,14 @@ func main() {
 		fx.Provide(
 			config.Load,
 			zap.NewProduction,
-
 			NewConnectionDB,
-
 			NewMQConnection,
 			NewMQConsumer,
 
 			repository.NewMessageRepository,
 			repository.NewTxLogRepository,
 			repository.NewTransactionManager,
-
 			NewPaymentGateway,
-
 			service.NewPaymentService,
 			service.NewRefundService,
 

@@ -19,6 +19,8 @@ type MessageRepository interface {
 	Update(ctx context.Context, message *model.Message) error
 	UpdateForSending(ctx context.Context, message *model.Message, staleThreshold time.Time) error
 	GetByID(id int64) (*model.Message, error)
+	GetByUserID(userID string, limit, offset int) ([]model.Message, error)
+	CountByUserID(userID string) (int, error)
 }
 
 type Message struct {
@@ -78,4 +80,33 @@ func (m *Message) GetByID(id int64) (*model.Message, error) {
 	}
 
 	return nil, err
+}
+
+func (m *Message) GetByUserID(userID string, limit, offset int) ([]model.Message, error) {
+	var messages []model.Message
+
+	err := m.db.Where("from_msisdn = ?", userID).
+		Order("created_at DESC").
+		Limit(limit).
+		Offset(offset).
+		Find(&messages).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return messages, nil
+}
+
+func (m *Message) CountByUserID(userID string) (int, error) {
+	var count int64
+
+	err := m.db.Model(&model.Message{}).
+		Where("from_msisdn = ?", userID).
+		Count(&count).Error
+
+	if err != nil {
+		return 0, err
+	}
+
+	return int(count), nil
 }

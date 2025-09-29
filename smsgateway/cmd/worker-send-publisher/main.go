@@ -20,13 +20,11 @@ func main() {
 		fx.Provide(
 			config.Load,
 			zap.NewProduction,
-
 			NewConnectionDB,
 			NewMQConnection,
 			NewMQPublisher,
 
 			repository.NewTxLogRepository,
-
 			service.NewMessageQueueService,
 
 			publishers.NewSendPublisher,

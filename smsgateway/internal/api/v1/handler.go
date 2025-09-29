@@ -10,10 +10,10 @@ import (
 
 type Handler struct {
 	logger  *zap.Logger
-	service service.MessageWorkflowService
+	service service.MessageService
 }
 
-func NewHandler(logger *zap.Logger, service service.MessageWorkflowService) *Handler {
+func NewHandler(logger *zap.Logger, service service.MessageService) *Handler {
 	return &Handler{logger: logger, service: service}
 }
 
@@ -21,7 +21,7 @@ func (h *Handler) Pong(c *fiber.Ctx) error {
 	return c.SendString("pong")
 }
 
-func (h *Handler) Message(c *fiber.Ctx) error {
+func (h *Handler) CreateMessage(c *fiber.Ctx) error {
 	ctx := c.UserContext()
 
 	var request SendMessageRequest
@@ -65,4 +65,39 @@ func (h *Handler) Message(c *fiber.Ctx) error {
 
 	return c.Status(fiber.StatusCreated).JSON(
 		SendMessageResponse{Status: string(model.MessageStatusCreated), MessageID: resp.MessageID})
+}
+
+func (h *Handler) GetMessages(c *fiber.Ctx) error {
+	ctx := c.UserContext()
+
+	var request GetMessagesRequest
+
+	if err := c.QueryParser(&request); err != nil {
+		h.logger.Warn("Failed to parse query parameters",
+			zap.Error(err))
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"code":    constants.ErrCodeInvalidRequestBody,
+			"message": constants.GetErrorMessage(constants.ErrCodeInvalidRequestBody),
+		})
+	}
+
+	if request.Limit == 0 {
+		request.Limit = 20
+	}
+
+	query := service.GetMessagesQuery{
+		UserID: request.UserID,
+		Limit:  request.Limit,
+		Offset: request.Offset,
+	}
+
+	response, err := h.service.GetMessagesByUserID(ctx, query)
+	if err != nil {
+		h.logger.Error("Failed to get messages",
+			zap.Error(err),
+			zap.String("user_id", request.UserID))
+		return err
+	}
+
+	return c.Status(fiber.StatusOK).JSON(response)
 }

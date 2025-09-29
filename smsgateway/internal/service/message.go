@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/Behyna/sms-services/smsgateway/internal/constants"
@@ -12,27 +13,103 @@ import (
 )
 
 type MessageService interface {
-	CreateMessageTx(ctx context.Context, cmd CreateMessageCommand) (CreateMessageResponse, error)
-	GetMessageForProcessing(ctx context.Context, messageID int64) (*model.Message, error)
-	UpdateMessageToSending(ctx context.Context, cmd UpdateMessageToSendingCommand) error
-	UpdateMessageSucceed(ctx context.Context, cmd UpdateMessageSuccessCommand) error
-	UpdateMessageToPermanentFailure(ctx context.Context, cmd UpdateMessageFailureCommand) error
-	UpdateMessageToTemporaryFailure(ctx context.Context, cmd UpdateMessageFailureCommand) error
+	CreateMessage(ctx context.Context, cmd CreateMessageCommand) (CreateMessageResponse, error)
+	GetMessagesByUserID(ctx context.Context, cmd GetMessagesQuery) (GetMessagesResponse, error)
 }
 
 type message struct {
 	messageRepo repository.MessageRepository
 	txLogRepo   repository.TxLogRepository
 	txManager   repository.TxManager
+	payment     PaymentService
 	logger      *zap.Logger
 }
 
 func NewMessageService(messageRepo repository.MessageRepository, txLogRepo repository.TxLogRepository,
-	txManager repository.TxManager, logger *zap.Logger) MessageService {
-	return &message{messageRepo: messageRepo, txLogRepo: txLogRepo, txManager: txManager, logger: logger}
+	txManager repository.TxManager, payment PaymentService, logger *zap.Logger) MessageService {
+	return &message{messageRepo: messageRepo, txLogRepo: txLogRepo, txManager: txManager, payment: payment, logger: logger}
 }
 
-func (m *message) CreateMessageTx(ctx context.Context, cmd CreateMessageCommand) (CreateMessageResponse, error) {
+func (m *message) CreateMessage(ctx context.Context, cmd CreateMessageCommand) (
+	CreateMessageResponse, error) {
+
+	idempotencyKey := fmt.Sprintf("charge-%s-%s", cmd.FromMSISDN, cmd.ClientMessageID)
+	request := ChargePaymentCommand{UserID: cmd.FromMSISDN, Amount: 1, IdempotencyKey: idempotencyKey}
+
+	err := m.payment.Charge(ctx, request)
+	if err != nil {
+		m.logger.Debug("Message creation aborted due to payment failure",
+			zap.String("clientMessageID", cmd.ClientMessageID))
+		return CreateMessageResponse{}, err
+	}
+
+	resp, err := m.createMessageTx(ctx, cmd)
+	if err == nil {
+		m.logger.Info("Message created successfully",
+			zap.Int64("messageID", resp.MessageID),
+			zap.String("clientMessageID", cmd.ClientMessageID))
+		return resp, nil
+	}
+
+	m.logger.Error("Critical: Payment succeeded but message creation failed, initiating refund",
+		zap.String("clientMessageID", cmd.ClientMessageID))
+
+	idempotencyKey = fmt.Sprintf("refund-%s-%s", cmd.FromMSISDN, cmd.ClientMessageID)
+	refundReq := RefundPaymentCommand{UserID: cmd.FromMSISDN, Amount: request.Amount, IdempotencyKey: idempotencyKey}
+
+	refundErr := m.payment.Refund(ctx, refundReq)
+	if refundErr != nil {
+		m.logger.Error("CRITICAL: User charged without service - manual intervention required",
+			zap.String("clientMessageID", cmd.ClientMessageID))
+
+		// TODO: alerting for manual investigation
+	}
+
+	m.logger.Warn("Payment refunded after DB failure", zap.String("clientMessageID", cmd.ClientMessageID))
+
+	return CreateMessageResponse{}, err
+}
+
+func (m *message) GetMessagesByUserID(ctx context.Context, cmd GetMessagesQuery) (GetMessagesResponse, error) {
+	messages, err := m.messageRepo.GetByUserID(cmd.UserID, cmd.Limit, cmd.Offset)
+	if err != nil {
+		m.logger.Error("Failed to get messages by user ID",
+			zap.String("user_id", cmd.UserID),
+			zap.Error(err))
+		return GetMessagesResponse{}, ErrDatabase
+	}
+
+	if len(messages) == 0 {
+		return GetMessagesResponse{}, NewServiceError(constants.ErrCodeUserNotFound, err)
+	}
+
+	total, err := m.messageRepo.CountByUserID(cmd.UserID)
+	if err != nil {
+		m.logger.Error("Failed to count messages by user ID",
+			zap.String("user_id", cmd.UserID),
+			zap.Error(err))
+		return GetMessagesResponse{}, ErrDatabase
+	}
+
+	responseMessages := make([]Message, len(messages))
+	for i, msg := range messages {
+		responseMessages[i] = Message{
+			MessageID: msg.ClientMessageID,
+			From:      msg.FromMSISDN,
+			To:        msg.ToMSISDN,
+			Text:      msg.Text,
+			Status:    string(msg.Status),
+			CreatedAt: msg.CreatedAt.Format("2006-01-02T15:04:05Z"),
+		}
+	}
+
+	return GetMessagesResponse{
+		Messages: responseMessages,
+		Total:    int64(total),
+	}, nil
+}
+
+func (m *message) createMessageTx(ctx context.Context, cmd CreateMessageCommand) (CreateMessageResponse, error) {
 	message := model.Message{
 		ClientMessageID: cmd.ClientMessageID,
 		FromMSISDN:      cmd.FromMSISDN,
@@ -90,177 +167,4 @@ func (m *message) CreateMessageTx(ctx context.Context, cmd CreateMessageCommand)
 	}
 
 	return CreateMessageResponse{MessageID: message.ID}, nil
-}
-
-func (m *message) GetMessageForProcessing(ctx context.Context, messageID int64) (*model.Message, error) {
-	msg, err := m.messageRepo.GetByID(messageID)
-	if err != nil {
-		if errors.Is(err, repository.ErrMessageNotFound) {
-			return nil, ErrMessageNotFound
-		}
-
-		return nil, ErrDatabase
-	}
-
-	switch msg.Status {
-	case model.MessageStatusCreated:
-		return msg, nil
-
-	case model.MessageStatusSending:
-		if msg.LastAttemptAt != nil && time.Since(*msg.LastAttemptAt) < 5*time.Minute {
-			m.logger.Warn("Message being processed by another consumer",
-				zap.Int64("messageID", messageID),
-				zap.Time("lastAttempt", *msg.LastAttemptAt))
-			return nil, ErrMessageBeingProcessed
-		}
-
-		return msg, nil
-
-	case model.MessageStatusSubmitted, model.MessageStatusFailedPerm, model.MessageStatusRefunded:
-		m.logger.Info("Message already processed successfully",
-			zap.Int64("messageID", messageID), zap.String("status", string(msg.Status)))
-		return nil, ErrMessageAlreadyProcessed
-
-	case model.MessageStatusFailedTemp:
-		m.logger.Info("Message was temporarily failed, retrying", zap.Int64("messageID", messageID))
-		return msg, nil
-
-	default:
-		m.logger.Error("Unknown message status",
-			zap.String("status", string(msg.Status)),
-			zap.Int64("messageID", messageID))
-		return nil, ErrUnknownMessageStatus
-	}
-}
-
-func (m *message) UpdateMessageToSending(ctx context.Context, cmd UpdateMessageToSendingCommand) error {
-	staleThreshold := time.Now().Add(-5 * time.Minute)
-
-	attempt := time.Now()
-	msg := model.Message{
-		ID:            cmd.MessageID,
-		Status:        model.MessageStatusSending,
-		AttemptCount:  cmd.AttemptCount,
-		LastAttemptAt: &attempt,
-		UpdatedAt:     time.Now(),
-	}
-
-	err := m.messageRepo.UpdateForSending(ctx, &msg, staleThreshold)
-	if err == nil {
-		return nil
-	}
-
-	if errors.Is(err, repository.ErrNoRowsAffected) {
-		m.logger.Info("Message not updated to SENDING, possibly processed by another consumer",
-			zap.Int64("messageID", cmd.MessageID))
-
-		return nil
-	}
-
-	m.logger.Error("Failed to update message for send attempt",
-		zap.Error(err),
-		zap.Int64("messageID", cmd.MessageID))
-
-	return ErrDatabase
-}
-
-func (m *message) UpdateMessageSucceed(ctx context.Context, cmd UpdateMessageSuccessCommand) error {
-	msg := model.Message{
-		ID:            cmd.MessageID,
-		Status:        model.MessageStatusSubmitted,
-		ProviderMsgID: &cmd.ProviderMsgID,
-		Provider:      &cmd.Provider,
-		UpdatedAt:     time.Now(),
-	}
-
-	if err := m.messageRepo.Update(ctx, &msg); err != nil {
-		m.logger.Error("Failed to update message after send attempt",
-			zap.Int64("messageID", cmd.MessageID),
-			zap.String("providerMessageID", cmd.ProviderMsgID),
-			zap.String("provider", cmd.Provider),
-			zap.Error(err))
-	}
-
-	txLog := model.TxLog{
-		MessageID: cmd.MessageID,
-		State:     model.TxLogStateSuccess,
-		LastError: nil,
-		UpdatedAt: time.Now(),
-	}
-
-	if err := m.txLogRepo.UpdateByMessageID(ctx, &txLog); err != nil {
-		m.logger.Error("Failed to update tx_log to published",
-			zap.Error(err),
-			zap.Int64("messageID", cmd.MessageID),
-			zap.Error(err))
-	}
-
-	return nil
-}
-
-func (m *message) UpdateMessageToPermanentFailure(ctx context.Context, cmd UpdateMessageFailureCommand) error {
-	msg := &model.Message{
-		ID:        cmd.MessageID,
-		Status:    model.MessageStatusFailedPerm,
-		UpdatedAt: time.Now(),
-	}
-
-	txLog := &model.TxLog{
-		MessageID:   cmd.MessageID,
-		State:       model.TxLogStateFailed,
-		Published:   false,
-		PublishedAt: nil,
-		LastError:   &cmd.LastError,
-		UpdatedAt:   time.Now(),
-	}
-
-	return m.txManager.WithTx(ctx, func(ctx context.Context) error {
-		if err := m.messageRepo.Update(ctx, msg); err != nil {
-			m.logger.Error("Failed to update message status after perm failure",
-				zap.Int64("messageID", cmd.MessageID),
-				zap.Error(err))
-			return err
-		}
-
-		if err := m.txLogRepo.UpdateForPermFailed(ctx, txLog); err != nil {
-			m.logger.Error("Failed to update transaction log after perm failure",
-				zap.Int64("messageID", cmd.MessageID),
-				zap.Error(err))
-			return err
-		}
-
-		return nil
-	})
-}
-
-func (m *message) UpdateMessageToTemporaryFailure(ctx context.Context, cmd UpdateMessageFailureCommand) error {
-	msg := model.Message{
-		ID:        cmd.MessageID,
-		Status:    model.MessageStatusFailedTemp,
-		UpdatedAt: time.Now(),
-	}
-
-	txLog := model.TxLog{
-		MessageID: cmd.MessageID,
-		LastError: &cmd.LastError,
-		UpdatedAt: time.Now(),
-	}
-
-	return m.txManager.WithTx(ctx, func(ctx context.Context) error {
-		if err := m.messageRepo.Update(ctx, &msg); err != nil {
-			m.logger.Error("Failed to update message status after temp failure",
-				zap.Int64("messageID", cmd.MessageID),
-				zap.Error(err))
-			return err
-		}
-
-		if err := m.txLogRepo.UpdateByMessageID(ctx, &txLog); err != nil {
-			m.logger.Error("Failed to update transaction log after temp failure",
-				zap.Int64("messageID", cmd.MessageID),
-				zap.Error(err))
-			return err
-		}
-
-		return nil
-	})
 }

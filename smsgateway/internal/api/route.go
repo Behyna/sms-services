@@ -5,7 +5,11 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
+const prefixV1 = "api/v1/"
+
 func SetupRoutes(app *fiber.App, handler *v1.Handler) {
+
 	app.Get("/ping", handler.Pong)
-	app.Post("/v1/message", handler.Message)
+	app.Post("/v1/message", handler.CreateMessage)
+	app.Get("/v1/messages", handler.GetMessages)
 }

@@ -11,8 +11,8 @@ import (
 )
 
 type PaymentService interface {
-	Charge(ctx context.Context, cmd ChargePaymentCommand) (err error)
-	Refund(ctx context.Context, cmd RefundPaymentCommand) (err error)
+	Charge(ctx context.Context, cmd ChargePaymentCommand) error
+	Refund(ctx context.Context, cmd RefundPaymentCommand) error
 }
 
 type Payment struct {
@@ -37,7 +37,6 @@ func (p *Payment) Charge(ctx context.Context, cmd ChargePaymentCommand) error {
 		resp, err := p.paymentGateway.Charge(ctx, request)
 		if err == nil {
 			p.logger.Info("User charged successfully",
-				// TODO: do something with user id
 				zap.String("userID", cmd.UserID),
 				zap.Int("attempt", attempt),
 				zap.String("idempotencyKey", cmd.IdempotencyKey),
