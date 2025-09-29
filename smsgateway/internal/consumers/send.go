@@ -4,26 +4,41 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/Behyna/common/pkg/mq"
 	"github.com/Behyna/sms-services/smsgateway/internal/service"
 	"go.uber.org/zap"
 )
 
-type Handler struct {
-	service service.MessageService
-	logger  *zap.Logger
+type SendConsumer interface {
+	Consume(ctx context.Context) error
 }
 
-func NewHandler(service service.MessageService, logger *zap.Logger) *Handler {
-	return &Handler{service, logger}
+type sendConsumer struct {
+	service  service.MessageWorkflowService
+	consumer mq.Consumer
+	logger   *zap.Logger
 }
 
-func (h *Handler) Handle(ctx context.Context, body []byte) error {
-	h.logger.Info("received send command", zap.ByteString("body", body))
+func NewSendConsumer(service service.MessageWorkflowService, consumer mq.Consumer, logger *zap.Logger) SendConsumer {
+	return &sendConsumer{
+		service:  service,
+		consumer: consumer,
+		logger:   logger,
+	}
+}
+
+func (s *sendConsumer) Consume(ctx context.Context) error {
+	return s.consumer.Consume(ctx, 1, "sms.send", s.handleMessage)
+}
+
+func (s *sendConsumer) handleMessage(ctx context.Context, body []byte) error {
+	s.logger.Info("received send command", zap.ByteString("body", body))
+
 	var cmd service.SendMessageCommand
 	if err := json.Unmarshal(body, &cmd); err != nil {
-		h.logger.Warn("invalid send command", zap.Error(err))
+		s.logger.Warn("invalid send command", zap.Error(err))
 		return err
 	}
 
-	return h.service.SendMessage(ctx, cmd)
+	return s.service.SendMessage(ctx, cmd)
 }

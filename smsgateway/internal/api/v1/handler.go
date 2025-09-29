@@ -1,7 +1,7 @@
 package v1
 
 import (
-	error2 "github.com/Behyna/sms-services/smsgateway/internal/error"
+	"github.com/Behyna/sms-services/smsgateway/internal/constants"
 	"github.com/Behyna/sms-services/smsgateway/internal/model"
 	"github.com/Behyna/sms-services/smsgateway/internal/service"
 	"github.com/gofiber/fiber/v2"
@@ -10,10 +10,10 @@ import (
 
 type Handler struct {
 	logger  *zap.Logger
-	service service.MessageService
+	service service.MessageWorkflowService
 }
 
-func NewHandler(logger *zap.Logger, service service.MessageService) *Handler {
+func NewHandler(logger *zap.Logger, service service.MessageWorkflowService) *Handler {
 	return &Handler{logger: logger, service: service}
 }
 
@@ -32,9 +32,9 @@ func (h *Handler) Message(c *fiber.Ctx) error {
 		h.logger.Warn("Failed to parse body",
 			zap.Error(err),
 			zap.String("body", string(c.Body())))
-		return c.Status(fiber.StatusBadRequest).JSON(error2.Response{
-			Error:   "Invalid request body",
-			Message: "Request body could not be parsed",
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"code":    constants.ErrCodeInvalidRequestBody,
+			"message": constants.GetErrorMessage(constants.ErrCodeInvalidRequestBody),
 		})
 	}
 
@@ -44,7 +44,9 @@ func (h *Handler) Message(c *fiber.Ctx) error {
 		ToMSISDN:        request.To,
 		Text:            request.Text,
 	}
-	if err := h.service.CreateMessageTransaction(ctx, cmd); err != nil {
+
+	resp, err := h.service.CreateMessage(ctx, cmd)
+	if err != nil {
 		h.logger.Error("Failed to create message transaction",
 			zap.Error(err),
 			zap.String("from", request.From),
@@ -52,10 +54,7 @@ func (h *Handler) Message(c *fiber.Ctx) error {
 			zap.String("messageID", request.MessageID),
 		)
 
-		return c.Status(fiber.StatusInternalServerError).JSON(error2.Response{
-			Error:   "Internal server error",
-			Message: "Could not process the request",
-		})
+		return err
 	}
 
 	h.logger.Info("Message received successfully",
@@ -64,5 +63,6 @@ func (h *Handler) Message(c *fiber.Ctx) error {
 		zap.String("messageID", request.MessageID),
 	)
 
-	return c.Status(fiber.StatusCreated).JSON(SendMessageResponse{Status: string(model.MessageStatusQueued), MessageID: request.MessageID})
+	return c.Status(fiber.StatusCreated).JSON(
+		SendMessageResponse{Status: string(model.MessageStatusCreated), MessageID: resp.MessageID})
 }

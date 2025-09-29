@@ -4,14 +4,18 @@ database:
   host: localhost
   port: 3306
   user: root
-  password: rootpassword
+  password: secret
   name: smsgateway
 rabbitmq:
-  url: amqp://admin:adminpassword@localhost:5672/
+  url: amqp://guest:guest@localhost:5672/
+payment_gateway:
+  enable: true
+  base_url: "http://127.0.0.1:8082/api/v1"
+  timeout: 30s
+  max_retries: 3
+  api_key: "your-api-key"
 provider:
   timeout: 2s
   max_retry: 1
   enable: true
   url: ""
-encryption:
-  key: "your_encryption_key_here"  

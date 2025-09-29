@@ -5,6 +5,7 @@ import "time"
 type MessageStatus string
 
 const (
+	MessageStatusCreated    MessageStatus = "CREATED"
 	MessageStatusQueued     MessageStatus = "QUEUED"
 	MessageStatusSending    MessageStatus = "SENDING"
 	MessageStatusSubmitted  MessageStatus = "SUBMITTED"
@@ -14,7 +15,7 @@ const (
 )
 
 type Message struct {
-	ID              int64         `gorm:"primaryKey;autoIncrement;column:id"`
+	ID              int64         `gorm:"primaryKey;autoIncrement;column:id;<-:create"`
 	ClientMessageID string        `gorm:"column:client_message_id;index:idx_client_msg_from,unique"`
 	FromMSISDN      string        `gorm:"column:from_msisdn;index:idx_client_msg_from,unique"`
 	ToMSISDN        string        `gorm:"column:to_msisdn"`

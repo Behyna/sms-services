@@ -4,14 +4,15 @@ import (
 	"context"
 
 	"github.com/Behyna/common/pkg/httpclient"
-	"github.com/Behyna/common/pkg/mq"
 	"github.com/Behyna/common/pkg/mysql"
-	"github.com/Behyna/common/pkg/smsprovider"
 	"github.com/Behyna/sms-services/smsgateway/internal/api"
 	v1 "github.com/Behyna/sms-services/smsgateway/internal/api/v1"
 	"github.com/Behyna/sms-services/smsgateway/internal/config"
+	"github.com/Behyna/sms-services/smsgateway/internal/error"
 	"github.com/Behyna/sms-services/smsgateway/internal/repository"
 	"github.com/Behyna/sms-services/smsgateway/internal/service"
+	"github.com/Behyna/sms-services/smsgateway/pkg/paymentgateway"
+	"github.com/Behyna/sms-services/smsgateway/pkg/smsprovider"
 	"github.com/gofiber/fiber/v2"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
@@ -22,16 +23,23 @@ func main() {
 	fx.New(
 		fx.Provide(
 			config.Load,
-			// TODO: wrap fiber,
 			zap.NewProduction,
-			fiber.New,
+			NewFiberApp,
 
 			NewConnectionDB,
-			NewMQConnection,
-			NewMQPublisher,
+
 			repository.NewMessageRepository,
 			repository.NewTxLogRepository,
+			repository.NewTransactionManager,
+
+			NewSMSProvider,
+			NewPaymentGateway,
+
+			service.NewPaymentService,
+			service.NewProviderService,
 			service.NewMessageService,
+
+			service.NewMessageWorkflowService,
 
 			v1.NewHandler,
 		),
@@ -60,39 +68,33 @@ func startServer(app *fiber.App, handler *v1.Handler, cfg *config.Config, logger
 	})
 }
 
-func setupQueues(rabbitMQ *mq.RabbitMQ, logger *zap.Logger, lc fx.Lifecycle) {
-	lc.Append(fx.Hook{
-		OnStart: func(ctx context.Context) error {
-			queues := []string{"sms.send", "sms.refund"}
-			if err := rabbitMQ.DeclareTopology(queues); err != nil {
-				logger.Error("Failed to declare queues", zap.Error(err))
-				return err
-			}
-
-			logger.Info("Queues declared successfully for publishing")
-			return nil
-		},
-		OnStop: func(ctx context.Context) error {
-			logger.Info("Closing RabbitMQ connection")
-			return rabbitMQ.Close()
-		},
-	})
-}
-
 func NewConnectionDB(cfg *config.Config, logger *zap.Logger) (*gorm.DB, error) {
 	ctx := context.Background()
 	return mysql.NewConnection(ctx, cfg.Database, logger)
 }
 
-func NewMQConnection(cfg *config.Config, logger *zap.Logger) (*mq.RabbitMQ, error) {
-	return mq.NewConnection(cfg.RabbitMQ, logger)
-}
-
-func NewMQPublisher(rabbitMQ *mq.RabbitMQ) (mq.Publisher, error) {
-	return rabbitMQ.CreatePublisher()
-}
-
-func NewProvider(cfg config.Config) smsprovider.Provider {
+func NewSMSProvider(cfg *config.Config) smsprovider.Provider {
 	client := httpclient.NewHTTPClient(cfg.Provider.Timeout)
 	return smsprovider.NewSMSProvider(cfg.Provider, client)
+}
+
+func NewPaymentGateway(cfg *config.Config) paymentgateway.PaymentGateway {
+	client := httpclient.NewHTTPClient(cfg.PaymentGateway.Timeout)
+	return paymentgateway.NewPaymentGateway(cfg.PaymentGateway, client)
+}
+
+func NewFiberApp() *fiber.App {
+	return fiber.New(fiber.Config{
+		ErrorHandler: middleware.ErrorHandler(),
+	})
+}
+
+func initLogger() (*zap.Logger, error) {
+	config := zap.NewProductionConfig()
+
+	config.Level = zap.NewAtomicLevelAt(zap.DebugLevel)
+
+	config.Encoding = "console"
+
+	return config.Build()
 }

@@ -2,6 +2,6 @@ package v1
 
 type SendMessageResponse struct {
 	Status    string `json:"status"`
-	MessageID string `json:"messageID"`
+	MessageID int64  `json:"message_id"`
 	Duplicate bool   `json:"duplicate"`
 }

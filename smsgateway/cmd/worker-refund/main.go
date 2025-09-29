@@ -11,7 +11,6 @@ import (
 	"github.com/Behyna/sms-services/smsgateway/internal/repository"
 	"github.com/Behyna/sms-services/smsgateway/internal/service"
 	"github.com/Behyna/sms-services/smsgateway/pkg/paymentgateway"
-	"github.com/Behyna/sms-services/smsgateway/pkg/smsprovider"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -32,43 +31,40 @@ func main() {
 			repository.NewTxLogRepository,
 			repository.NewTransactionManager,
 
-			NewSMSProvider,
 			NewPaymentGateway,
 
-			service.NewMessageService,
-			service.NewProviderService,
 			service.NewPaymentService,
+			service.NewRefundService,
 
-			service.NewMessageWorkflowService,
-			consumers.NewSendConsumer,
+			consumers.NewRefundConsumer,
 		),
-		fx.Invoke(runSendConsumer),
+		fx.Invoke(runRefundConsumer),
 	).Run()
 }
 
-func runSendConsumer(cfg *config.Config, sendConsumer consumers.SendConsumer, logger *zap.Logger,
+func runRefundConsumer(cfg *config.Config, refundConsumer consumers.RefundConsumer, logger *zap.Logger,
 	rabbit *mq.RabbitMQ, lc fx.Lifecycle,
 ) {
 	appCtx, cancel := context.WithCancel(context.Background())
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			if err := rabbit.DeclareTopology([]string{"sms.send"}); err != nil {
+			if err := rabbit.DeclareTopology([]string{"sms.refund"}); err != nil {
 				logger.Error("declare topology failed", zap.Error(err))
 				return err
 			}
-			logger.Info("queue declared", zap.String("queue", "sms.send"))
+			logger.Info("queue declared", zap.String("queue", "sms.refund"))
 
 			go func() {
-				if err := sendConsumer.Consume(appCtx); err != nil {
+				if err := refundConsumer.Consume(appCtx); err != nil {
 					logger.Error("consumer exited", zap.Error(err))
 				}
 			}()
 
-			logger.Info("send consumer started")
+			logger.Info("refund consumer started")
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
-			logger.Info("stopping send consumer")
+			logger.Info("stopping refund consumer")
 			cancel()
 			return rabbit.Close()
 		},
@@ -78,11 +74,6 @@ func runSendConsumer(cfg *config.Config, sendConsumer consumers.SendConsumer, lo
 func NewConnectionDB(cfg *config.Config, logger *zap.Logger) (*gorm.DB, error) {
 	ctx := context.Background()
 	return mysql.NewConnection(ctx, cfg.Database, logger)
-}
-
-func NewSMSProvider(cfg *config.Config) smsprovider.Provider {
-	client := httpclient.NewHTTPClient(cfg.Provider.Timeout)
-	return smsprovider.NewSMSProvider(cfg.Provider, client)
 }
 
 func NewPaymentGateway(cfg *config.Config) paymentgateway.PaymentGateway {

@@ -5,24 +5,21 @@ import (
 
 	"github.com/Behyna/common/pkg/mq"
 	"github.com/Behyna/common/pkg/mysql"
-	"github.com/Behyna/common/pkg/smsprovider"
+	"github.com/Behyna/sms-services/smsgateway/pkg/paymentgateway"
+	"github.com/Behyna/sms-services/smsgateway/pkg/smsprovider"
 	"github.com/spf13/viper"
 )
 
 type Config struct {
-	API      API                `mapstructure:"api"`
-	Database mysql.Config       `mapstructure:"database"`
-	RabbitMQ mq.Config          `mapstructure:"rabbitmq"`
-	Provider smsprovider.Config `mapstructure:"provider"`
+	API            API                   `mapstructure:"api"`
+	Database       mysql.Config          `mapstructure:"database"`
+	RabbitMQ       mq.Config             `mapstructure:"rabbitmq"`
+	Provider       smsprovider.Config    `mapstructure:"provider"`
+	PaymentGateway paymentgateway.Config `mapstructure:"payment_gateway"`
 }
 
 type API struct {
 	Port string `mapstructure:"port"`
-}
-
-type EncryptionConfig struct {
-	Key  []byte
-	Mode string
 }
 
 func Load() (cfg *Config, err error) {

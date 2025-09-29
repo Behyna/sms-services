@@ -3,7 +3,7 @@ CREATE TABLE tx_logs (
     message_id    BIGINT NOT NULL,
     from_msisdn   VARCHAR(255) NOT NULL,
     amount        INT NOT NULL DEFAULT 1,
-    state         ENUM('PENDING','SUCCESS','REFUNDED','FAILED') NOT NULL,
+    state         ENUM('CREATED','PENDING','SUCCESS','REFUNDED','FAILED') NOT NULL,
     published     BOOLEAN NOT NULL DEFAULT false,
     published_at  TIMESTAMP NULL,
     last_error    TEXT,
